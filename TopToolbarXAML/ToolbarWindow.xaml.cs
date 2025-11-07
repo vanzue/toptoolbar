@@ -30,15 +30,15 @@ namespace TopToolbar
     public sealed partial class ToolbarWindow : WindowEx, IDisposable
     {
         private const int TriggerZoneHeight = 2;
-        private const double ToolbarHeight = 120d;
-        private static readonly Thickness ToolbarChromePadding = new(24, 16, 24, 16);
-        private const double ToolbarShadowPadding = 20d;
-        private const double ToolbarCornerRadius = 28d;
-        private const double ToolbarButtonSize = 48d;
-        private const double ToolbarSeparatorHeight = 40d;
+        private const double ToolbarHeight = 140d;                  // Increased height for better visual effect
+        private static readonly Thickness ToolbarChromePadding = new(28, 20, 28, 20);  // Increased padding
+        private const double ToolbarShadowPadding = 24d;           // Increased shadow padding
+        private const double ToolbarCornerRadius = 32d;            // Increased corner radius to make it more visible
+        private const double ToolbarButtonSize = 52d;              // Slightly increased button size
+        private const double ToolbarSeparatorHeight = 44d;         // Adjusted separator height accordingly
         private const double ToolbarLabelFontSize = 13d;
         private const double ToolbarIconFontSize = 22d;
-        private const double ToolbarStackSpacing = 14d;
+        private const double ToolbarStackSpacing = 16d;            // Increased button spacing
         private readonly ToolbarConfigService _configService;
         private readonly ActionProviderRuntime _providerRuntime;
         private readonly ActionProviderService _providerService;
@@ -462,10 +462,25 @@ namespace TopToolbar
                 Name = "ToolbarContainer",
                 CornerRadius = new CornerRadius(ToolbarCornerRadius),
 
-                // Updated per user request: light semi-transparent gray
+                // Semi-transparent white to let the DesktopAcrylicBackdrop show through
+                // The blur effect comes from DesktopAcrylicBackdrop, this just adds a tint
                 Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                    Windows.UI.Color.FromArgb(0xCC, 0xF0, 0xF0, 0xF0)), // #CCF0F0F0 (~80% opacity light gray)
-                Height = ToolbarHeight,
+                    Windows.UI.Color.FromArgb(120, 255, 255, 255)), // 47% opacity - lets backdrop blur show through
+
+                // Alternative tint options (change alpha value to adjust transparency):
+                // More transparent (more blur visible):
+                // Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                //     Windows.UI.Color.FromArgb(80, 255, 255, 255)), // 31% opacity
+
+                // More opaque (less blur, more solid):
+                // Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                //     Windows.UI.Color.FromArgb(160, 255, 255, 255)), // 63% opacity
+
+                // Dark mode option:
+                // Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                //     Windows.UI.Color.FromArgb(140, 30, 30, 30)), // Dark with blur
+
+                MinHeight = ToolbarHeight,
                 Padding = ToolbarChromePadding,
                 VerticalAlignment = VerticalAlignment.Center, // Back to center
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -1544,18 +1559,29 @@ namespace TopToolbar
                 double scale = _toolbarContainer.XamlRoot?.RasterizationScale ?? 1.0;
 
                 double desiredWidthDip = mainStack.DesiredSize.Width + _toolbarContainer.Padding.Left + _toolbarContainer.Padding.Right;
-                double desiredHeightDip = _toolbarContainer.ActualHeight > 0 ? _toolbarContainer.ActualHeight : ToolbarHeight;
+                double desiredHeightDip = mainStack.DesiredSize.Height + _toolbarContainer.Padding.Top + _toolbarContainer.Padding.Bottom;
+                if (double.IsNaN(desiredHeightDip) || desiredHeightDip <= 0)
+                {
+                    desiredHeightDip = _toolbarContainer.ActualHeight > 0 ? _toolbarContainer.ActualHeight : ToolbarHeight;
+                }
+                else
+                {
+                    desiredHeightDip = Math.Max(desiredHeightDip, ToolbarHeight);
+                }
 
                 var displayArea = DisplayArea.GetFromWindowId(this.AppWindow.Id, DisplayAreaFallback.Primary);
                 double maxWidthDip = desiredWidthDip;
+                double maxHeightDip = desiredHeightDip;
                 if (displayArea != null)
                 {
                     maxWidthDip = Math.Max(ToolbarButtonSize, (displayArea.WorkArea.Width / scale) - (ToolbarShadowPadding * 2));
+                    maxHeightDip = Math.Max(ToolbarButtonSize, (displayArea.WorkArea.Height / scale) - (ToolbarShadowPadding * 2));
                 }
 
                 double widthDip = Math.Min(desiredWidthDip, maxWidthDip);
+                double heightDip = Math.Min(desiredHeightDip, maxHeightDip);
                 double widthWithShadowDip = widthDip + (ToolbarShadowPadding * 2);
-                double heightWithShadowDip = desiredHeightDip + (ToolbarShadowPadding * 2);
+                double heightWithShadowDip = heightDip + (ToolbarShadowPadding * 2);
 
                 int widthPx = (int)Math.Ceiling(widthWithShadowDip * scale);
                 int heightPx = (int)Math.Ceiling(heightWithShadowDip * scale);
@@ -1693,6 +1719,9 @@ namespace TopToolbar
         [DllImport("user32.dll")]
         private static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
 
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
         private void HideToolbar(bool initial = false)
         {
             _isVisible = false;
@@ -1766,8 +1795,20 @@ namespace TopToolbar
 
         private void ApplyTransparentBackground()
         {
-            // The key is to NOT have any background on the window itself
-            // With WS_EX_LAYERED + no background, only visible content shows
+            // Apply DesktopAcrylicBackdrop to enable proper Acrylic blur effect
+            // Note: WS_EX_LAYERED conflicts with Acrylic, so we use system backdrop instead
+            if (this.SystemBackdrop == null)
+            {
+                try
+                {
+                    // Use DesktopAcrylicBackdrop for true blur-behind effect
+                    this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
+                }
+                catch
+                {
+                    // Fallback if DesktopAcrylic is not available
+                }
+            }
         }
 
         private void ShowProfileSwitcherMenu(FrameworkElement targetElement)
@@ -1826,6 +1867,9 @@ namespace TopToolbar
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
 
         [DllImport("user32.dll")]
         private static extern uint GetDpiForWindow(IntPtr hWnd);
