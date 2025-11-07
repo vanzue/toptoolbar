@@ -1,0 +1,70 @@
+# General OS junk
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Visual Studio / IDE
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# VS Code (keep common project files)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+!.vscode/*.md
+
+# Build output
+**/bin/
+**/obj/
+**/out/
+
+# Logs and temp
+*.log
+*.tlog
+*.tmp
+*.temp
+
+# Test results / coverage
+TestResults/
+TestResult*/
+*.trx
+*.coverage*
+coverage*.xml
+
+# NuGet
+**/packages/
+!**/packages/build/
+!**/packages/repositories.config
+*.nupkg
+*.snupkg
+
+# Rider / ReSharper
+.idea/
+_ReSharper*/
+*.DotSettings.user
+*.sln.iml
+
+# Windows App SDK / UWP packaging
+**/AppPackages/
+**/BundleArtifacts/
+*.appx
+*.appxbundle
+*.appxupload
+*.msix
+*.msixbundle
+*.msixupload
+*.msixsym
+**/MsixContent/
+
+# Tooling caches
+*.cache
+*.db
+
+# XAML compiled artifacts
+*.xbf
