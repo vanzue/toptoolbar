@@ -22,11 +22,13 @@ namespace TopToolbar.Services.Workspaces
         private const uint SwpNoActivate = 0x0010;
         private const uint GwOwner = 4;
         private const int GwlpStyle = -16;
+        private const int GwlpExStyle = -20;
         private const long WsDisabled = 0x08000000L;
         private const long WsVisible = 0x10000000L;
         private const long WsMinimize = 0x20000000L;
         private const long WsChild = 0x40000000L;
         private const long WsMinimizeBox = 0x00020000L;
+        private const long WsExToolWindow = 0x00000080L;
         private const ushort ValueTypeLpwstr = 31;
         private const int WaitForInputIdleTimeoutMilliseconds = 5000;
         private const int WindowVisibilityTimeoutMilliseconds = 5000;
@@ -91,6 +93,7 @@ namespace TopToolbar.Services.Workspaces
             var processFileName = string.IsNullOrWhiteSpace(processPath) ? string.Empty : Path.GetFileName(processPath);
             var processName = string.IsNullOrWhiteSpace(processFileName) ? string.Empty : Path.GetFileNameWithoutExtension(processFileName);
             var appUserModelId = TryGetAppUserModelId(hwnd);
+            var className = GetWindowClassName(hwnd);
 
             info = new WindowInfo(
                 hwnd,
@@ -101,8 +104,20 @@ namespace TopToolbar.Services.Workspaces
                 title,
                 appUserModelId,
                 isVisible,
-                bounds);
+                bounds,
+                className);
             return true;
+        }
+
+        public static bool HasToolWindowStyle(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            var exStyle = GetWindowLongPtr(hwnd, GwlpExStyle).ToInt64();
+            return (exStyle & WsExToolWindow) == WsExToolWindow;
         }
 
         public static bool IsTopLevelWindow(IntPtr hwnd)
@@ -543,6 +558,23 @@ namespace TopToolbar.Services.Workspaces
             }
         }
 
+        private static string GetWindowClassName(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero)
+            {
+                return string.Empty;
+            }
+
+            var builder = new StringBuilder(256);
+            var read = GetClassName(hwnd, builder, builder.Capacity);
+            if (read <= 0)
+            {
+                return string.Empty;
+            }
+
+            return builder.ToString();
+        }
+
         private static string TryGetAppUserModelId(IntPtr hwnd)
         {
             IPropertyStore propertyStore = null;
@@ -639,6 +671,9 @@ namespace TopToolbar.Services.Workspaces
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool GetWindowPlacement(IntPtr hWnd, ref NativeWindowPlacement lpwndpl);

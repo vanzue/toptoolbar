@@ -19,6 +19,29 @@ namespace TopToolbar.Services.Workspaces
         private static readonly TimeSpan WindowWaitTimeout = TimeSpan.FromSeconds(20);
         private static readonly TimeSpan WindowPollInterval = TimeSpan.FromMilliseconds(200);
 
+        private const string ApplicationFrameHostProcessName = "ApplicationFrameHost.exe";
+        private static readonly HashSet<string> ExcludedWindowClasses = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Shell_TrayWnd",
+            "Shell_SecondaryTrayWnd",
+            "TaskListThumbnailWnd",
+            "Progman",
+            "WorkerW",
+            "NotifyIconOverflowWindow",
+            "SysShadow",
+            "SearchPane",
+            "SearchHost",
+            "Windows.UI.Core.CoreWindow",
+            "NativeHWNDHost",
+            "ApplicationManager_DesktopShellWindow",
+            "LauncherTipWndClass",
+        };
+
+        private static readonly HashSet<string> ExcludedWindowTitles = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Program Manager",
+        };
+
         private readonly WorkspaceFileLoader _fileLoader;
         private readonly WindowTracker _windowTracker;
         private bool _disposed;
@@ -52,7 +75,7 @@ namespace TopToolbar.Services.Workspaces
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (window == null || !window.IsVisible || window.ProcessId == (uint)Environment.ProcessId)
+                if (!ShouldCaptureWindow(window, windows, out var effectiveProcessPath))
                 {
                     continue;
                 }
@@ -60,6 +83,17 @@ namespace TopToolbar.Services.Workspaces
                 var app = CreateApplicationDefinitionFromWindow(window, monitorSnapshots);
                 if (app != null)
                 {
+                    if (!string.IsNullOrWhiteSpace(effectiveProcessPath))
+                    {
+                        app.Path = effectiveProcessPath;
+
+                        var fileName = Path.GetFileName(effectiveProcessPath);
+                        if (!string.IsNullOrWhiteSpace(fileName))
+                        {
+                            app.Name = fileName;
+                        }
+                    }
+
                     applications.Add(app);
                 }
             }
@@ -96,6 +130,123 @@ namespace TopToolbar.Services.Workspaces
 
             await _fileLoader.SaveWorkspaceAsync(workspace, cancellationToken).ConfigureAwait(false);
             return workspace;
+        }
+
+        private bool ShouldCaptureWindow(WindowInfo window, IReadOnlyList<WindowInfo> snapshot, out string resolvedProcessPath)
+        {
+            resolvedProcessPath = string.Empty;
+
+            if (window == null)
+            {
+                return false;
+            }
+
+            if (!window.IsVisible || window.ProcessId == (uint)Environment.ProcessId)
+            {
+                return false;
+            }
+
+            if (window.Bounds.IsEmpty)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(window.Title))
+            {
+                return false;
+            }
+
+            resolvedProcessPath = ResolveProcessPath(window, snapshot);
+            if (string.IsNullOrWhiteSpace(resolvedProcessPath))
+            {
+                return false;
+            }
+
+            if (IsExcludedWindow(window))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static string ResolveProcessPath(WindowInfo window, IReadOnlyList<WindowInfo> snapshot)
+        {
+            if (window == null)
+            {
+                return string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(window.ProcessPath) && !IsApplicationFrameHost(window))
+            {
+                return window.ProcessPath;
+            }
+
+            if (!IsApplicationFrameHost(window) || snapshot == null || snapshot.Count == 0)
+            {
+                return window.ProcessPath ?? string.Empty;
+            }
+
+            var title = window.Title;
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                return window.ProcessPath ?? string.Empty;
+            }
+
+            foreach (var candidate in snapshot)
+            {
+                if (candidate == null || candidate.Handle == window.Handle)
+                {
+                    continue;
+                }
+
+                if (!string.Equals(candidate.Title, title, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (candidate.ProcessId != window.ProcessId && !string.IsNullOrWhiteSpace(candidate.ProcessPath))
+                {
+                    return candidate.ProcessPath;
+                }
+            }
+
+            return window.ProcessPath ?? string.Empty;
+        }
+
+        private static bool IsApplicationFrameHost(WindowInfo window)
+        {
+            if (window == null)
+            {
+                return false;
+            }
+
+            return string.Equals(window.ProcessFileName, ApplicationFrameHostProcessName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsExcludedWindow(WindowInfo window)
+        {
+            if (window == null)
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(window.ClassName) && ExcludedWindowClasses.Contains(window.ClassName))
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(window.Title) && ExcludedWindowTitles.Contains(window.Title))
+            {
+                return true;
+            }
+
+            if (NativeWindowHelper.HasToolWindowStyle(window.Handle))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         private List<MonitorSnapshot> CaptureMonitorSnapshots()

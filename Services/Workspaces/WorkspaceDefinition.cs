@@ -32,20 +32,5 @@ namespace TopToolbar.Services.Workspaces
 
         [JsonPropertyName("applications")]
         public List<ApplicationDefinition> Applications { get; set; } = new();
-
-        [JsonPropertyName("apps")]
-        public List<ApplicationDefinition> LegacyApplications
-        {
-            get => Applications;
-            set
-            {
-                if (value == null)
-                {
-                    return;
-                }
-
-                Applications = value;
-            }
-        }
     }
 }

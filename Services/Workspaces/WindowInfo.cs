@@ -17,7 +17,8 @@ namespace TopToolbar.Services.Workspaces
             string title,
             string appUserModelId,
             bool isVisible,
-            WindowBounds bounds)
+            WindowBounds bounds,
+            string className)
         {
             Handle = handle;
             ProcessId = processId;
@@ -28,6 +29,7 @@ namespace TopToolbar.Services.Workspaces
             AppUserModelId = appUserModelId ?? string.Empty;
             IsVisible = isVisible;
             Bounds = bounds;
+            ClassName = className ?? string.Empty;
         }
 
         public IntPtr Handle { get; }
@@ -47,5 +49,7 @@ namespace TopToolbar.Services.Workspaces
         public bool IsVisible { get; }
 
         public WindowBounds Bounds { get; }
+
+        public string ClassName { get; }
     }
 }
