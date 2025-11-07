@@ -701,42 +701,7 @@ namespace TopToolbar
                 groupContainer.Shadow = groupShadow;
                 groupContainer.Translation = new System.Numerics.Vector3(0, 0, 1);
 
-                // Group hover background highlight (keeps button animations intact)
-                groupContainer.PointerEntered += (s, e) =>
-                {
-                    try
-                    {
-                        if (groupContainer.Background is Microsoft.UI.Xaml.Media.SolidColorBrush b)
-                        {
-                            // Light gray hover background (slightly translucent)
-                            b.Color = Windows.UI.Color.FromArgb(40, 0, 0, 0); // alpha 40 ~ 16% dark overlay
-                        }
-                        else
-                        {
-                            groupContainer.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(40, 0, 0, 0));
-                        }
-                    }
-                    catch
-                    {
-                    }
-                };
-                groupContainer.PointerExited += (s, e) =>
-                {
-                    try
-                    {
-                        if (groupContainer.Background is Microsoft.UI.Xaml.Media.SolidColorBrush b)
-                        {
-                            b.Color = Windows.UI.Color.FromArgb(0, 0, 0, 0); // back to transparent
-                        }
-                        else
-                        {
-                            groupContainer.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
-                        }
-                    }
-                    catch
-                    {
-                    }
-                };
+                // Background stays transparent; hover effect intentionally disabled.
 
                 var groupPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
                 foreach (var btn in enabledButtons)
@@ -1465,41 +1430,7 @@ namespace TopToolbar
             newContainer.Shadow = groupShadow;
             newContainer.Translation = new System.Numerics.Vector3(0, 0, 1);
 
-            // Group hover background highlight (incremental path)
-            newContainer.PointerEntered += (s, e) =>
-            {
-                try
-                {
-                    if (newContainer.Background is Microsoft.UI.Xaml.Media.SolidColorBrush b)
-                    {
-                        b.Color = Windows.UI.Color.FromArgb(40, 0, 0, 0);
-                    }
-                    else
-                    {
-                        newContainer.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(40, 0, 0, 0));
-                    }
-                }
-                catch
-                {
-                }
-            };
-            newContainer.PointerExited += (s, e) =>
-            {
-                try
-                {
-                    if (newContainer.Background is Microsoft.UI.Xaml.Media.SolidColorBrush b)
-                    {
-                        b.Color = Windows.UI.Color.FromArgb(0, 0, 0, 0);
-                    }
-                    else
-                    {
-                        newContainer.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
-                    }
-                }
-                catch
-                {
-                }
-            };
+            // Background stays transparent; hover effect intentionally disabled.
 
             var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
             foreach (var btn in enabledButtons)
