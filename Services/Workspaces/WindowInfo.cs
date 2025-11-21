@@ -14,6 +14,7 @@ namespace TopToolbar.Services.Workspaces
             string processPath,
             string processFileName,
             string processName,
+            string packageFullName,
             string title,
             string appUserModelId,
             bool isVisible,
@@ -25,6 +26,7 @@ namespace TopToolbar.Services.Workspaces
             ProcessPath = processPath ?? string.Empty;
             ProcessFileName = processFileName ?? string.Empty;
             ProcessName = processName ?? string.Empty;
+            PackageFullName = packageFullName ?? string.Empty;
             Title = title ?? string.Empty;
             AppUserModelId = appUserModelId ?? string.Empty;
             IsVisible = isVisible;
@@ -41,6 +43,8 @@ namespace TopToolbar.Services.Workspaces
         public string ProcessFileName { get; }
 
         public string ProcessName { get; }
+
+        public string PackageFullName { get; }
 
         public string Title { get; }
 

@@ -11,7 +11,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-
 using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI; // Colors namespace
 using Microsoft.UI.Xaml;
@@ -32,103 +31,20 @@ namespace TopToolbar
 {
     public sealed partial class SettingsWindow : WinUIEx.WindowEx, IDisposable
     {
+        private const bool ProfilesEnabled = false;
         private readonly SettingsViewModel _vm;
-        private readonly Services.Profiles.IProfileManager _profileManager;
-        private readonly Services.Profiles.ProfileFileService _profileFileService;
-        private readonly Services.Profiles.IProfileRuntime _profileRuntime;
-        private readonly bool _ownsFileService;
-
         private bool _isClosed;
         private bool _disposed;
         private FrameworkElement _appTitleBarCache;
 
-        private Models.Profile _selectedProfile;
-        private System.Collections.Generic.List<Models.ProfileGroup> _currentProfileGroups = new();
-
         public SettingsViewModel ViewModel => _vm;
 
-        public Models.Profile SelectedProfile
-        {
-            get => _selectedProfile;
-            set
-            {
-                SafeLogWarning($"Setting SelectedProfile to: {value?.Name ?? "null"} with {value?.Groups?.Count ?? 0} groups");
-                _selectedProfile = value;
-                UpdateProfileUI();
-                if (_selectedProfile != null)
-                {
-                    // Reset legacy ViewModel group selection so old groups/buttons UI disappears
-                    try
-                    {
-                        if (_vm.SelectedGroup != null)
-                        {
-                            _vm.SelectedGroup = null; // This should toggle HasSelectedGroup/HasNoSelectedGroup
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        SafeLogWarning($"Failed to reset legacy SelectedGroup: {ex.Message}");
-                    }
-
-                    _currentProfileGroups = _selectedProfile.Groups ?? new System.Collections.Generic.List<Models.ProfileGroup>();
-                    SafeLogWarning($"Updated _currentProfileGroups to have {_currentProfileGroups.Count} groups");
-                    UpdateActionsUI();
-                }
-                else
-                {
-                    _currentProfileGroups.Clear();
-                    SafeLogWarning("Cleared _currentProfileGroups");
-                    try
-                    {
-                        if (_vm.SelectedGroup != null)
-                        {
-                            _vm.SelectedGroup = null;
-                        }
-                    }
-                    catch
-                    {
-                        // Intentionally ignored: legacy VM cleanup best-effort
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Explicitly clears legacy group editing UI so that when switching to a profile with no groups
-        /// the right side does not continue to show the previous profile's group/buttons.
-        /// </summary>
-        private void ResetLegacyGroupEditingUI()
-        {
-            try
-            {
-                if (_vm.SelectedGroup != null)
-                {
-                    _vm.SelectedGroup = null;
-                }
-            }
-            catch (Exception ex)
-            {
-                SafeLogWarning($"ResetLegacyGroupEditingUI failed: {ex.Message}");
-            }
-        }
-
-        // New preferred overload: accept runtime (unified state). Falls back to file service if null.
-        public SettingsWindow(Services.Profiles.IProfileRuntime profileRuntime, Services.Profiles.IProfileManager profileManager = null)
+        public SettingsWindow(
+            Services.Profiles.IProfileRuntime profileRuntime = null,
+            Services.Profiles.IProfileManager profileManager = null
+        )
         {
             InitializeComponent();
-
-            _profileRuntime = profileRuntime;
-            _profileManager = profileManager;
-            if (_profileRuntime != null)
-            {
-                _profileFileService = _profileRuntime.FileService;
-                _ownsFileService = false; // runtime manages lifecycle
-            }
-            else
-            {
-                _profileFileService = new Services.Profiles.ProfileFileService();
-                _ownsFileService = true;
-            }
 
             _vm = new SettingsViewModel(new ToolbarConfigService());
             InitializeWindowStyling();
@@ -136,10 +52,6 @@ namespace TopToolbar
             this.Closed += async (s, e) =>
             {
                 await _vm.SaveAsync();
-                if (_ownsFileService)
-                {
-                    _profileFileService?.Dispose();
-                }
             };
             this.Activated += async (s, e) =>
             {
@@ -147,37 +59,12 @@ namespace TopToolbar
                 {
                     await _vm.LoadAsync(this.DispatcherQueue);
                 }
-
-                // Initialize profile list on first activation
-                InitializeProfilesList();
             };
 
             // Keep left pane visible when no selection so UI doesn't look empty
             _vm.PropertyChanged += ViewModel_PropertyChanged;
 
-            // Try to initialize profile list early
-            System.Threading.Tasks.Task.Run(async () =>
-            {
-                await System.Threading.Tasks.Task.Delay(200); // Give UI time to load
-                InitializeProfilesList();
-            });
-
-            // Fallback: also trigger once the visual tree has definitely loaded to avoid first-open empty list race.
-            AttachRootLoadedHandler();
-
             // Modern styling applied via InitializeWindowStyling
-        }
-
-        // Legacy compatibility constructor (kept for existing call sites): delegates to runtime-aware overload.
-        public SettingsWindow(Services.Profiles.IProfileManager profileManager = null, Services.Profiles.ProfileFileService profileFileService = null)
-            : this(null, profileManager)
-        {
-            if (profileFileService != null)
-            {
-                // Override file service if explicitly supplied (rare). Mark ownership false.
-                _profileFileService = profileFileService;
-                _ownsFileService = false;
-            }
         }
 
         private void InitializeWindowStyling()
@@ -191,9 +78,7 @@ namespace TopToolbar
                 };
                 SystemBackdrop = mica;
             }
-            catch
-            {
-            }
+            catch { }
 
             // Extend into title bar & customize caption buttons
             try
@@ -215,15 +100,15 @@ namespace TopToolbar
                     this.SetTitleBar(dragRegion);
                 }
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(SettingsViewModel.SelectedGroup) ||
-                e.PropertyName == nameof(SettingsViewModel.HasNoSelectedGroup))
+            if (
+                e.PropertyName == nameof(SettingsViewModel.SelectedGroup)
+                || e.PropertyName == nameof(SettingsViewModel.HasNoSelectedGroup)
+            )
             {
                 EnsureLeftPaneColumn();
                 _leftPaneColumnCache ??= GetLeftPaneColumn();
@@ -239,7 +124,10 @@ namespace TopToolbar
             EnsureLeftPaneColumn();
             if (_leftPaneColumnCache != null)
             {
-                _leftPaneColumnCache.Width = (_leftPaneColumnCache.Width.Value == 0) ? new GridLength(240) : new GridLength(0);
+                _leftPaneColumnCache.Width =
+                    (_leftPaneColumnCache.Width.Value == 0)
+                        ? new GridLength(240)
+                        : new GridLength(0);
             }
         }
 
@@ -273,9 +161,7 @@ namespace TopToolbar
                 {
                     SafeLogWarning($"Save before close failed: {ex.Message}");
                 }
-                catch
-                {
-                }
+                catch { }
             }
 
             SafeCloseWindow();
@@ -293,7 +179,9 @@ namespace TopToolbar
         private async void OnRemoveGroup(object sender, RoutedEventArgs e)
         {
             var tag = (sender as Button)?.Tag;
-            var group = (tag as ButtonGroup) ?? (_vm.Groups.Contains(_vm.SelectedGroup) ? _vm.SelectedGroup : null);
+            var group =
+                (tag as ButtonGroup)
+                ?? (_vm.Groups.Contains(_vm.SelectedGroup) ? _vm.SelectedGroup : null);
             if (group != null)
             {
                 _vm.RemoveGroup(group);
@@ -334,7 +222,9 @@ namespace TopToolbar
 
         private async void OnBrowseWorkspaceIcon(object sender, RoutedEventArgs e)
         {
-            var workspace = (sender as FrameworkElement)?.DataContext as WorkspaceButtonViewModel ?? _vm.SelectedWorkspace;
+            var workspace =
+                (sender as FrameworkElement)?.DataContext as WorkspaceButtonViewModel
+                ?? _vm.SelectedWorkspace;
             if (workspace == null)
             {
                 return;
@@ -355,12 +245,15 @@ namespace TopToolbar
                 return;
             }
 
-            await _vm.TrySetWorkspaceImageIconFromFileAsync(workspace, file.Path).ConfigureAwait(true);
+            await _vm.TrySetWorkspaceImageIconFromFileAsync(workspace, file.Path)
+                .ConfigureAwait(true);
         }
 
         private void OnResetWorkspaceIcon(object sender, RoutedEventArgs e)
         {
-            var workspace = (sender as FrameworkElement)?.DataContext as WorkspaceButtonViewModel ?? _vm.SelectedWorkspace;
+            var workspace =
+                (sender as FrameworkElement)?.DataContext as WorkspaceButtonViewModel
+                ?? _vm.SelectedWorkspace;
             if (workspace == null)
             {
                 return;
@@ -382,16 +275,24 @@ namespace TopToolbar
             }
         }
 
+        #if false // Profile management removed
         // Profile management event handlers
         private async void OnAddProfile(object sender, RoutedEventArgs e)
         {
             try
             {
-                var newProfileId = "profile-" + DateTime.Now.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var newProfileId =
+                    "profile-"
+                    + DateTime.Now.Ticks.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture
+                    );
                 var newProfileName = $"Profile {DateTime.Now:HH:mm}";
 
                 // Create empty profile
-                var newProfile = _profileFileService.CreateEmptyProfile(newProfileId, newProfileName);
+                var newProfile = _profileFileService.CreateEmptyProfile(
+                    newProfileId,
+                    newProfileName
+                );
 
                 // Save the profile
                 _profileFileService.SaveProfile(newProfile);
@@ -428,17 +329,27 @@ namespace TopToolbar
 
         private void OnProfileSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (!ProfilesEnabled)
+            {
+                return;
+            }
+
             try
             {
                 var listView = sender as ListView;
-                var selectedProfileMeta = listView?.SelectedItem as Services.Profiles.Models.ProfileMeta;
+                var selectedProfileMeta =
+                    listView?.SelectedItem as Services.Profiles.Models.ProfileMeta;
                 if (selectedProfileMeta != null)
                 {
-                    SafeLogWarning($"Profile selection changed to: {selectedProfileMeta.Id} - {selectedProfileMeta.Name}");
+                    SafeLogWarning(
+                        $"Profile selection changed to: {selectedProfileMeta.Id} - {selectedProfileMeta.Name}"
+                    );
 
                     // Load full profile from ProfileFileService
                     var fullProfile = _profileFileService.GetProfile(selectedProfileMeta.Id);
-                    SafeLogWarning($"Loaded full profile: {fullProfile?.Name ?? "null"} with {fullProfile?.Groups?.Count ?? 0} groups");
+                    SafeLogWarning(
+                        $"Loaded full profile: {fullProfile?.Name ?? "null"} with {fullProfile?.Groups?.Count ?? 0} groups"
+                    );
 
                     SelectedProfile = fullProfile;
 
@@ -466,7 +377,15 @@ namespace TopToolbar
 
         private async void OnProfileNameTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
         {
-            if (e.Key == Windows.System.VirtualKey.Enter || e.Key == Windows.System.VirtualKey.Escape)
+            if (!ProfilesEnabled)
+            {
+                return;
+            }
+
+            if (
+                e.Key == Windows.System.VirtualKey.Enter
+                || e.Key == Windows.System.VirtualKey.Escape
+            )
             {
                 var textBox = sender as TextBox;
                 if (textBox != null)
@@ -478,6 +397,11 @@ namespace TopToolbar
 
         private async void OnProfileNameTextBoxLostFocus(object sender, RoutedEventArgs e)
         {
+            if (!ProfilesEnabled)
+            {
+                return;
+            }
+
             var textBox = sender as TextBox;
             if (textBox != null)
             {
@@ -487,6 +411,11 @@ namespace TopToolbar
 
         private async System.Threading.Tasks.Task CommitProfileNameEdit(TextBox textBox, bool save)
         {
+            if (!ProfilesEnabled)
+            {
+                return;
+            }
+
             if (_profileManager == null)
             {
                 return;
@@ -516,15 +445,24 @@ namespace TopToolbar
 
         private void UpdateProfileUI()
         {
+            if (!ProfilesEnabled)
+            {
+                return;
+            }
+
             try
             {
                 // Find and update profile-related UI elements
                 if (this.Content is FrameworkElement root)
                 {
-                    var profileSettingsCard = FindChildByName(root, "ProfileSettingsCard") as FrameworkElement;
-                    var selectedProfileNameText = FindChildByName(root, "SelectedProfileNameText") as TextBlock;
-                    var actionsHeaderPanel = FindChildByName(root, "ActionsHeaderPanel") as FrameworkElement;
-                    var actionsScrollViewer = FindChildByName(root, "ActionsScrollViewer") as FrameworkElement;
+                    var profileSettingsCard =
+                        FindChildByName(root, "ProfileSettingsCard") as FrameworkElement;
+                    var selectedProfileNameText =
+                        FindChildByName(root, "SelectedProfileNameText") as TextBlock;
+                    var actionsHeaderPanel =
+                        FindChildByName(root, "ActionsHeaderPanel") as FrameworkElement;
+                    var actionsScrollViewer =
+                        FindChildByName(root, "ActionsScrollViewer") as FrameworkElement;
 
                     if (_selectedProfile != null)
                     {
@@ -536,7 +474,8 @@ namespace TopToolbar
 
                         if (selectedProfileNameText != null)
                         {
-                            selectedProfileNameText.Text = _selectedProfile.Name ?? "Unknown Profile";
+                            selectedProfileNameText.Text =
+                                _selectedProfile.Name ?? "Unknown Profile";
                         }
 
                         if (actionsHeaderPanel != null)
@@ -614,7 +553,8 @@ namespace TopToolbar
                 if (!_disposed && !_isClosed && this.Content is FrameworkElement root)
                 {
                     // First make sure the ActionsScrollViewer is visible
-                    var actionsScrollViewer = FindChildByName(root, "ActionsScrollViewer") as ScrollViewer;
+                    var actionsScrollViewer =
+                        FindChildByName(root, "ActionsScrollViewer") as ScrollViewer;
                     if (actionsScrollViewer != null)
                     {
                         actionsScrollViewer.Visibility = Visibility.Visible;
@@ -628,7 +568,9 @@ namespace TopToolbar
                     var actionsPanel = FindChildByName(root, "ActionsPanel") as StackPanel;
                     if (actionsPanel != null)
                     {
-                        SafeLogWarning($"Found ActionsPanel, clearing {actionsPanel.Children.Count} existing children");
+                        SafeLogWarning(
+                            $"Found ActionsPanel, clearing {actionsPanel.Children.Count} existing children"
+                        );
 
                         // Clear existing content
                         actionsPanel.Children.Clear();
@@ -679,11 +621,15 @@ namespace TopToolbar
                             actionsPanel.Children.Add(groupExpander);
                         }
 
-                        SafeLogWarning($"Actions UI updated with {_currentProfileGroups.Count} groups");
+                        SafeLogWarning(
+                            $"Actions UI updated with {_currentProfileGroups.Count} groups"
+                        );
                     }
                     else
                     {
-                        SafeLogWarning("ActionsPanel control not found - checking if parent container is collapsed");
+                        SafeLogWarning(
+                            "ActionsPanel control not found - checking if parent container is collapsed"
+                        );
                     }
                 }
             }
@@ -708,10 +654,14 @@ namespace TopToolbar
                     _profileFileService.SaveProfile(_selectedProfile);
 
                     // Notify ToolbarWindow that the profile has been updated
-                    System.Diagnostics.Debug.WriteLine($"SettingsWindow.OnGroupToggled: Group {group.Name} toggled to {toggleSwitch.IsOn}, notifying profile runtime");
+                    System.Diagnostics.Debug.WriteLine(
+                        $"SettingsWindow.OnGroupToggled: Group {group.Name} toggled to {toggleSwitch.IsOn}, notifying profile runtime"
+                    );
                     _profileRuntime?.NotifyActiveProfileUpdated();
 
-                    SafeLogWarning($"Group {group.Name} is now {(group.IsEnabled ? "enabled" : "disabled")}");
+                    SafeLogWarning(
+                        $"Group {group.Name} is now {(group.IsEnabled ? "enabled" : "disabled")}"
+                    );
                 }
             }
             catch (Exception ex)
@@ -735,10 +685,14 @@ namespace TopToolbar
                     _profileFileService.SaveProfile(_selectedProfile);
 
                     // Notify ToolbarWindow that the profile has been updated
-                    System.Diagnostics.Debug.WriteLine($"SettingsWindow.OnActionToggled: Action {action.DisplayName} toggled to {toggleSwitch.IsOn}, notifying profile runtime");
+                    System.Diagnostics.Debug.WriteLine(
+                        $"SettingsWindow.OnActionToggled: Action {action.DisplayName} toggled to {toggleSwitch.IsOn}, notifying profile runtime"
+                    );
                     _profileRuntime?.NotifyActiveProfileUpdated();
 
-                    SafeLogWarning($"Action {action.DisplayName} is now {(action.IsEnabled ? "enabled" : "disabled")}");
+                    SafeLogWarning(
+                        $"Action {action.DisplayName} is now {(action.IsEnabled ? "enabled" : "disabled")}"
+                    );
                 }
             }
             catch (Exception ex)
@@ -746,20 +700,34 @@ namespace TopToolbar
                 SafeLogWarning($"Failed to toggle action: {ex.Message}");
             }
         }
+        #endif
 
+        #if false
         private async System.Threading.Tasks.Task RefreshProfilesList()
         {
+            if (_disposed || _isClosed)
+            {
+                return;
+            }
+
+            if (!ProfilesEnabled)
+            {
+                return;
+            }
+
             try
             {
                 // Get profiles from ProfileFileService
                 var profiles = _profileFileService.GetAllProfiles();
 
                 // Convert to ProfileMeta for ListView binding (maintaining compatibility)
-                var profileMetas = profiles.Select(p => new Services.Profiles.Models.ProfileMeta
-                {
-                    Id = p.Id,
-                    Name = p.Name,
-                }).ToList();
+                var profileMetas = profiles
+                    .Select(p => new Services.Profiles.Models.ProfileMeta
+                    {
+                        Id = p.Id,
+                        Name = p.Name,
+                    })
+                    .ToList();
 
                 // Try to find and update the ListView
                 var success = await TryUpdateProfilesList(profileMetas);
@@ -779,9 +747,16 @@ namespace TopToolbar
             }
         }
 
-        private async System.Threading.Tasks.Task<bool> TryUpdateProfilesList(System.Collections.Generic.List<Services.Profiles.Models.ProfileMeta> profileMetas)
+        private async System.Threading.Tasks.Task<bool> TryUpdateProfilesList(
+            System.Collections.Generic.List<Services.Profiles.Models.ProfileMeta> profileMetas
+        )
         {
             if (_disposed || _isClosed)
+            {
+                return false;
+            }
+
+            if (!ProfilesEnabled)
             {
                 return false;
             }
@@ -790,38 +765,41 @@ namespace TopToolbar
             {
                 var result = false;
 
-                // Fast exit if window already torn down
-                if (this.AppWindow == null)
+                // Fast exit if window already torn down or dispatcher unavailable
+                if (this.AppWindow == null || this.DispatcherQueue == null)
                 {
                     return false;
                 }
 
                 // Guard dispatch with IsWindowClosed style check
-                if (!this.DispatcherQueue.TryEnqueue(() =>
-                {
-                    try
+                if (
+                    !this.DispatcherQueue.TryEnqueue(() =>
                     {
-                        if (_disposed || _isClosed)
+                        try
                         {
-                            return;
-                        }
-
-                        var content = this.Content; // may throw if closed
-                        if (content is FrameworkElement root)
-                        {
-                            var profilesList = FindChildByName(root, "ProfilesList") as ListView;
-                            if (profilesList != null)
+                            if (_disposed || _isClosed)
                             {
-                                profilesList.ItemsSource = profileMetas;
-                                result = true;
+                                return;
+                            }
+
+                            var content = this.Content; // may throw if closed
+                            if (content is FrameworkElement root)
+                            {
+                                var profilesList =
+                                    FindChildByName(root, "ProfilesList") as ListView;
+                                if (profilesList != null)
+                                {
+                                    profilesList.ItemsSource = profileMetas;
+                                    result = true;
+                                }
                             }
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        SafeLogWarning($"TryUpdateProfilesList enqueue failed: {ex.Message}");
-                    }
-                }))
+                        catch (Exception ex)
+                        {
+                            SafeLogWarning($"TryUpdateProfilesList enqueue failed: {ex.Message}");
+                        }
+                    })
+                )
                 {
                     return false;
                 }
@@ -917,8 +895,21 @@ namespace TopToolbar
                 SafeLogWarning("AttachRootLoadedHandler failed: " + ex.Message);
             }
         }
+        #endif
 
-        private static async Task ShowSimpleMessageAsync(XamlRoot xamlRoot, string title, string message)
+        // Profile feature removed; keep stub handlers for XAML.
+        private async void OnAddProfile(object sender, RoutedEventArgs e) => await Task.CompletedTask;
+        private void OnRemoveSelectedProfile(object sender, RoutedEventArgs e) { }
+        private void OnProfileSelectionChanged(object sender, SelectionChangedEventArgs e) { }
+        private void OnStartRenameProfile(object sender, RoutedEventArgs e) { }
+        private async void OnProfileNameTextBoxKeyDown(object sender, KeyRoutedEventArgs e) => await Task.CompletedTask;
+        private async void OnProfileNameTextBoxLostFocus(object sender, RoutedEventArgs e) => await Task.CompletedTask;
+
+        private static async Task ShowSimpleMessageAsync(
+            XamlRoot xamlRoot,
+            string title,
+            string message
+        )
         {
             if (xamlRoot == null)
             {
@@ -953,25 +944,25 @@ namespace TopToolbar
                 return;
             }
 
-            var nameBox = new TextBox
-            {
-                PlaceholderText = "Workspace name",
-            };
+            var nameBox = new TextBox { PlaceholderText = "Workspace name" };
 
-            if (root.Resources != null && root.Resources.TryGetValue("StandardTextBoxStyle", out var styleObj) && styleObj is Style textBoxStyle)
+            if (
+                root.Resources != null
+                && root.Resources.TryGetValue("StandardTextBoxStyle", out var styleObj)
+                && styleObj is Style textBoxStyle
+            )
             {
                 nameBox.Style = textBoxStyle;
             }
 
-            var dialogContent = new StackPanel
-            {
-                Spacing = 12,
-            };
-            dialogContent.Children.Add(new TextBlock
-            {
-                Text = "Enter a name for the new workspace snapshot.",
-                TextWrapping = TextWrapping.Wrap,
-            });
+            var dialogContent = new StackPanel { Spacing = 12 };
+            dialogContent.Children.Add(
+                new TextBlock
+                {
+                    Text = "Enter a name for the new workspace snapshot.",
+                    TextWrapping = TextWrapping.Wrap,
+                }
+            );
             dialogContent.Children.Add(nameBox);
 
             var dialog = new ContentDialog
@@ -1005,14 +996,24 @@ namespace TopToolbar
             try
             {
                 using var workspaceProvider = new WorkspaceProvider();
-                var workspace = await workspaceProvider.SnapshotAsync(workspaceName, CancellationToken.None).ConfigureAwait(true);
+                var workspace = await workspaceProvider
+                    .SnapshotAsync(workspaceName, CancellationToken.None)
+                    .ConfigureAwait(true);
                 if (workspace == null)
                 {
-                    await ShowSimpleMessageAsync(root.XamlRoot, "Snapshot failed", "No eligible windows were detected to capture.");
+                    await ShowSimpleMessageAsync(
+                        root.XamlRoot,
+                        "Snapshot failed",
+                        "No eligible windows were detected to capture."
+                    );
                     return;
                 }
 
-                await ShowSimpleMessageAsync(root.XamlRoot, "Snapshot saved", $"Workspace \"{workspace.Name}\" has been saved.");
+                await ShowSimpleMessageAsync(
+                    root.XamlRoot,
+                    "Snapshot saved",
+                    $"Workspace \"{workspace.Name}\" has been saved."
+                );
             }
             catch (Exception ex)
             {
@@ -1027,7 +1028,8 @@ namespace TopToolbar
                 return;
             }
 
-            var targetButton = (sender as FrameworkElement)?.DataContext as ToolbarButton ?? _vm.SelectedButton;
+            var targetButton =
+                (sender as FrameworkElement)?.DataContext as ToolbarButton ?? _vm.SelectedButton;
             if (targetButton == null)
             {
                 return;
@@ -1075,9 +1077,7 @@ namespace TopToolbar
             {
                 _vm?.Dispose();
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         // InitializeWindowStyling removed.
@@ -1097,9 +1097,7 @@ namespace TopToolbar
                     }
                 }
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         private ColumnDefinition _leftPaneColumnCache;
@@ -1123,9 +1121,7 @@ namespace TopToolbar
                     return (ColumnDefinition)root.FindName("LeftPaneColumn");
                 }
             }
-            catch
-            {
-            }
+            catch { }
 
             return null;
         }
@@ -1140,9 +1136,7 @@ namespace TopToolbar
                     return root.FindName("AppTitleBar") as FrameworkElement;
                 }
             }
-            catch
-            {
-            }
+            catch { }
 
             return null;
         }
@@ -1161,9 +1155,7 @@ namespace TopToolbar
                 {
                     SafeLogWarning($"Close COMException 0x{comEx.HResult:X}");
                 }
-                catch
-                {
-                }
+                catch { }
             }
             catch (Exception ex)
             {
@@ -1171,16 +1163,18 @@ namespace TopToolbar
                 {
                     SafeLogError($"Unexpected Close exception: {ex.Message}");
                 }
-                catch
-                {
-                }
+                catch { }
             }
         }
 
         private static void SafeLogWarning(string msg)
         {
 #if HAS_MANAGEDCOMMON_LOGGER
-            try { ManagedCommon.Logger.LogWarning("SettingsWindow: " + msg); } catch { }
+            try
+            {
+                ManagedCommon.Logger.LogWarning("SettingsWindow: " + msg);
+            }
+            catch { }
 #else
             Debug.WriteLine("[SettingsWindow][WARN] " + msg);
 #endif
@@ -1189,7 +1183,11 @@ namespace TopToolbar
         private static void SafeLogError(string msg)
         {
 #if HAS_MANAGEDCOMMON_LOGGER
-            try { ManagedCommon.Logger.LogError("SettingsWindow: " + msg); } catch { }
+            try
+            {
+                ManagedCommon.Logger.LogError("SettingsWindow: " + msg);
+            }
+            catch { }
 #else
             Debug.WriteLine("[SettingsWindow][ERR ] " + msg);
 #endif

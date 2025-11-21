@@ -66,7 +66,8 @@ namespace TopToolbar.Services.Workspaces
 
                     return true;
                 },
-                IntPtr.Zero);
+                IntPtr.Zero
+            );
 
             return windows;
         }
@@ -90,8 +91,13 @@ namespace TopToolbar.Services.Workspaces
             var bounds = GetWindowBounds(hwnd);
             var isVisible = IsWindowVisible(hwnd);
             var processPath = TryGetProcessPath(processId);
-            var processFileName = string.IsNullOrWhiteSpace(processPath) ? string.Empty : Path.GetFileName(processPath);
-            var processName = string.IsNullOrWhiteSpace(processFileName) ? string.Empty : Path.GetFileNameWithoutExtension(processFileName);
+            var processFileName = string.IsNullOrWhiteSpace(processPath)
+                ? string.Empty
+                : Path.GetFileName(processPath);
+            var processName = string.IsNullOrWhiteSpace(processFileName)
+                ? string.Empty
+                : Path.GetFileNameWithoutExtension(processFileName);
+            var packageFullName = TryGetPackageFullName(processId);
             var appUserModelId = TryGetAppUserModelId(hwnd);
             var className = GetWindowClassName(hwnd);
 
@@ -101,11 +107,13 @@ namespace TopToolbar.Services.Workspaces
                 processPath,
                 processFileName,
                 processName,
+                packageFullName,
                 title,
                 appUserModelId,
                 isVisible,
                 bounds,
-                className);
+                className
+            );
             return true;
         }
 
@@ -160,17 +168,29 @@ namespace TopToolbar.Services.Workspaces
 
             if (!string.IsNullOrWhiteSpace(app.AppUserModelId))
             {
-                if (!string.IsNullOrWhiteSpace(window.AppUserModelId) &&
-                    string.Equals(window.AppUserModelId, app.AppUserModelId, StringComparison.OrdinalIgnoreCase))
+                if (
+                    !string.IsNullOrWhiteSpace(window.AppUserModelId)
+                    && string.Equals(
+                        window.AppUserModelId,
+                        app.AppUserModelId,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
                 {
                     return true;
                 }
             }
 
             var normalizedAppPath = NormalizePath(app.Path);
-            if (!string.IsNullOrWhiteSpace(normalizedAppPath) &&
-                !string.IsNullOrWhiteSpace(window.ProcessPath) &&
-                string.Equals(window.ProcessPath, normalizedAppPath, StringComparison.OrdinalIgnoreCase))
+            if (
+                !string.IsNullOrWhiteSpace(normalizedAppPath)
+                && !string.IsNullOrWhiteSpace(window.ProcessPath)
+                && string.Equals(
+                    window.ProcessPath,
+                    normalizedAppPath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             {
                 return true;
             }
@@ -178,24 +198,38 @@ namespace TopToolbar.Services.Workspaces
             if (!string.IsNullOrWhiteSpace(app.Path))
             {
                 var appFileName = NormalizeFileName(app.Path);
-                if (!string.IsNullOrWhiteSpace(appFileName) &&
-                    !string.IsNullOrWhiteSpace(window.ProcessFileName) &&
-                    string.Equals(window.ProcessFileName, appFileName, StringComparison.OrdinalIgnoreCase))
+                if (
+                    !string.IsNullOrWhiteSpace(appFileName)
+                    && !string.IsNullOrWhiteSpace(window.ProcessFileName)
+                    && string.Equals(
+                        window.ProcessFileName,
+                        appFileName,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
                 {
                     return true;
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(app.Name) &&
-                !string.IsNullOrWhiteSpace(window.ProcessName) &&
-                string.Equals(NormalizeProcessName(window.ProcessName), NormalizeProcessName(app.Name), StringComparison.OrdinalIgnoreCase))
+            if (
+                !string.IsNullOrWhiteSpace(app.Name)
+                && !string.IsNullOrWhiteSpace(window.ProcessName)
+                && string.Equals(
+                    NormalizeProcessName(window.ProcessName),
+                    NormalizeProcessName(app.Name),
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             {
                 return true;
             }
 
-            if (!string.IsNullOrWhiteSpace(app.Title) &&
-                !string.IsNullOrWhiteSpace(window.Title) &&
-                string.Equals(window.Title, app.Title, StringComparison.OrdinalIgnoreCase))
+            if (
+                !string.IsNullOrWhiteSpace(app.Title)
+                && !string.IsNullOrWhiteSpace(window.Title)
+                && string.Equals(window.Title, app.Title, StringComparison.OrdinalIgnoreCase)
+            )
             {
                 return true;
             }
@@ -203,7 +237,13 @@ namespace TopToolbar.Services.Workspaces
             return false;
         }
 
-        public static void SetWindowPlacement(IntPtr hwnd, ApplicationDefinition.ApplicationPosition position, bool maximize, bool minimize, bool waitForInputIdle = false)
+        public static void SetWindowPlacement(
+            IntPtr hwnd,
+            ApplicationDefinition.ApplicationPosition position,
+            bool maximize,
+            bool minimize,
+            bool waitForInputIdle = false
+        )
         {
             if (hwnd == IntPtr.Zero || position == null || position.IsEmpty)
             {
@@ -227,7 +267,8 @@ namespace TopToolbar.Services.Workspaces
                 position.Y,
                 position.Width,
                 position.Height,
-                SwpNoActivate | SwpNoZOrder);
+                SwpNoActivate | SwpNoZOrder
+            );
 
             if (!placementApplied)
             {
@@ -265,7 +306,10 @@ namespace TopToolbar.Services.Workspaces
             return WaitForWindowVisible(hwnd);
         }
 
-        private static void VerifyWindowPlacementWithRetry(IntPtr hwnd, ApplicationDefinition.ApplicationPosition position)
+        private static void VerifyWindowPlacementWithRetry(
+            IntPtr hwnd,
+            ApplicationDefinition.ApplicationPosition position
+        )
         {
             if (hwnd == IntPtr.Zero || position == null || position.IsEmpty)
             {
@@ -293,11 +337,15 @@ namespace TopToolbar.Services.Workspaces
                     position.Y,
                     position.Width,
                     position.Height,
-                    SwpNoActivate | SwpNoZOrder);
+                    SwpNoActivate | SwpNoZOrder
+                );
             }
         }
 
-        private static bool IsWindowAtExpectedPlacement(IntPtr hwnd, ApplicationDefinition.ApplicationPosition position)
+        private static bool IsWindowAtExpectedPlacement(
+            IntPtr hwnd,
+            ApplicationDefinition.ApplicationPosition position
+        )
         {
             var bounds = GetWindowBounds(hwnd);
             if (bounds.IsEmpty)
@@ -305,10 +353,10 @@ namespace TopToolbar.Services.Workspaces
                 return false;
             }
 
-            return Math.Abs(bounds.Left - position.X) <= WindowPlacementTolerancePixels &&
-                Math.Abs(bounds.Top - position.Y) <= WindowPlacementTolerancePixels &&
-                Math.Abs(bounds.Width - position.Width) <= WindowPlacementTolerancePixels &&
-                Math.Abs(bounds.Height - position.Height) <= WindowPlacementTolerancePixels;
+            return Math.Abs(bounds.Left - position.X) <= WindowPlacementTolerancePixels
+                && Math.Abs(bounds.Top - position.Y) <= WindowPlacementTolerancePixels
+                && Math.Abs(bounds.Width - position.Width) <= WindowPlacementTolerancePixels
+                && Math.Abs(bounds.Height - position.Height) <= WindowPlacementTolerancePixels;
         }
 
         private static bool WaitForWindowVisible(IntPtr hwnd)
@@ -374,7 +422,12 @@ namespace TopToolbar.Services.Workspaces
             }
         }
 
-        public static bool TryGetWindowPlacement(IntPtr hwnd, out WindowBounds normalBounds, out bool isMinimized, out bool isMaximized)
+        public static bool TryGetWindowPlacement(
+            IntPtr hwnd,
+            out WindowBounds normalBounds,
+            out bool isMinimized,
+            out bool isMaximized
+        )
         {
             normalBounds = default;
             isMinimized = false;
@@ -514,9 +567,7 @@ namespace TopToolbar.Services.Workspaces
                     return builder.ToString();
                 }
             }
-            catch
-            {
-            }
+            catch { }
             finally
             {
                 if (handle != IntPtr.Zero)
@@ -655,7 +706,8 @@ namespace TopToolbar.Services.Workspaces
             int y,
             int cx,
             int cy,
-            uint uFlags);
+            uint uFlags
+        );
 
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
@@ -673,22 +725,49 @@ namespace TopToolbar.Services.Workspaces
         private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+        private static extern int GetClassName(
+            IntPtr hWnd,
+            StringBuilder lpClassName,
+            int nMaxCount
+        );
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool GetWindowPlacement(IntPtr hWnd, ref NativeWindowPlacement lpwndpl);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr OpenProcess(ProcessAccess desiredAccess, bool inheritHandle, uint processId);
+        private static extern bool GetWindowPlacement(
+            IntPtr hWnd,
+            ref NativeWindowPlacement lpwndpl
+        );
 
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private static extern bool QueryFullProcessImageName(IntPtr hProcess, int dwFlags, StringBuilder lpExeName, ref uint lpdwSize);
+        private static extern int GetPackageFullName(
+            IntPtr hProcess,
+            ref int packageFullNameLength,
+            StringBuilder packageFullName
+        );
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(
+            ProcessAccess desiredAccess,
+            bool inheritHandle,
+            uint processId
+        );
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern bool QueryFullProcessImageName(
+            IntPtr hProcess,
+            int dwFlags,
+            StringBuilder lpExeName,
+            ref uint lpdwSize
+        );
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool CloseHandle(IntPtr hObject);
 
         [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern int SHGetPropertyStoreForWindow(IntPtr hwnd, ref Guid riid, out IPropertyStore propertyStore);
+        private static extern int SHGetPropertyStoreForWindow(
+            IntPtr hwnd,
+            ref Guid riid,
+            out IPropertyStore propertyStore
+        );
 
         [DllImport("ole32.dll")]
         private static extern int PropVariantClear(ref PropVariant pvar);
@@ -766,6 +845,54 @@ namespace TopToolbar.Services.Workspaces
             public int IntValue;
             public int Reserved4;
             public int Reserved5;
+        }
+
+        private static string TryGetPackageFullName(uint processId)
+        {
+            if (processId == 0)
+            {
+                return string.Empty;
+            }
+
+            var handle = OpenProcess(ProcessAccess.QueryLimitedInformation, false, processId);
+            if (handle == IntPtr.Zero)
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                // First call to get the required length.
+                int length = 0;
+                var hr = GetPackageFullName(handle, ref length, null);
+                const int ErrorInsufficientBuffer = 122;
+                const int AppModelErrorNoPackage = 15700;
+                if (hr == AppModelErrorNoPackage)
+                {
+                    return string.Empty;
+                }
+
+                if (hr != ErrorInsufficientBuffer || length <= 0)
+                {
+                    return string.Empty;
+                }
+
+                var builder = new StringBuilder(length);
+                hr = GetPackageFullName(handle, ref length, builder);
+                if (hr == 0)
+                {
+                    return builder.ToString();
+                }
+            }
+            catch
+            {
+            }
+            finally
+            {
+                _ = CloseHandle(handle);
+            }
+
+            return string.Empty;
         }
     }
 }

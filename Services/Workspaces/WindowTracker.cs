@@ -49,7 +49,10 @@ namespace TopToolbar.Services.Workspaces
             return FindMatches(app, 0);
         }
 
-        public IReadOnlyList<WindowInfo> FindMatches(ApplicationDefinition app, uint expectedProcessId)
+        public IReadOnlyList<WindowInfo> FindMatches(
+            ApplicationDefinition app,
+            uint expectedProcessId
+        )
         {
             if (app == null)
             {
@@ -87,11 +90,13 @@ namespace TopToolbar.Services.Workspaces
             uint expectedProcessId,
             TimeSpan timeout,
             TimeSpan pollInterval,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
-            var known = knownHandles != null && knownHandles.Count > 0
-                ? new HashSet<IntPtr>(knownHandles)
-                : new HashSet<IntPtr>();
+            var known =
+                knownHandles != null && knownHandles.Count > 0
+                    ? new HashSet<IntPtr>(knownHandles)
+                    : new HashSet<IntPtr>();
 
             var deadline = Stopwatch.StartNew();
             while (deadline.Elapsed < timeout)
@@ -159,7 +164,15 @@ namespace TopToolbar.Services.Workspaces
 
         private void RegisterHook(uint eventType)
         {
-            var handle = SetWinEventHook(eventType, eventType, IntPtr.Zero, _winEventCallback, 0, 0, EventFlagOutOfContext | EventFlagSkipOwnProcess);
+            var handle = SetWinEventHook(
+                eventType,
+                eventType,
+                IntPtr.Zero,
+                _winEventCallback,
+                0,
+                0,
+                EventFlagOutOfContext | EventFlagSkipOwnProcess
+            );
             if (handle != IntPtr.Zero)
             {
                 _hookHandles.Add(handle);
@@ -179,7 +192,8 @@ namespace TopToolbar.Services.Workspaces
                     RefreshWindow(hwnd);
                     return true;
                 },
-                IntPtr.Zero);
+                IntPtr.Zero
+            );
         }
 
         private void RefreshWindow(IntPtr hwnd)
@@ -214,7 +228,15 @@ namespace TopToolbar.Services.Workspaces
             }
         }
 
-        private void OnWinEvent(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+        private void OnWinEvent(
+            IntPtr hWinEventHook,
+            uint eventType,
+            IntPtr hwnd,
+            int idObject,
+            int idChild,
+            uint dwEventThread,
+            uint dwmsEventTime
+        )
         {
             if (idObject != ObjectIdWindow || idChild != 0 || hwnd == IntPtr.Zero)
             {
@@ -238,7 +260,15 @@ namespace TopToolbar.Services.Workspaces
             }
         }
 
-        private delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
+        private delegate void WinEventDelegate(
+            IntPtr hWinEventHook,
+            uint eventType,
+            IntPtr hwnd,
+            int idObject,
+            int idChild,
+            uint dwEventThread,
+            uint dwmsEventTime
+        );
 
         [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
@@ -251,11 +281,13 @@ namespace TopToolbar.Services.Workspaces
             WinEventDelegate lpfnWinEventProc,
             uint idProcess,
             uint idThread,
-            uint dwFlags);
+            uint dwFlags
+        );
 
         [DllImport("user32.dll")]
         private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
 
         private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+
     }
 }

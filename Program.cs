@@ -24,7 +24,8 @@ namespace TopToolbar
                 {
                     try
                     {
-                        var message = $"AppDomain unhandled exception (IsTerminating={e.IsTerminating})";
+                        var message =
+                            $"AppDomain unhandled exception (IsTerminating={e.IsTerminating})";
                         if (e.ExceptionObject is Exception exception)
                         {
                             AppLogger.LogError(message, exception);
@@ -34,9 +35,7 @@ namespace TopToolbar
                             AppLogger.LogError($"{message} - {e.ExceptionObject}");
                         }
                     }
-                    catch
-                    {
-                    }
+                    catch { }
                 };
                 TaskScheduler.UnobservedTaskException += (_, e) =>
                 {
@@ -45,9 +44,7 @@ namespace TopToolbar
                         AppLogger.LogError("Unobserved task exception", e.Exception);
                         e.SetObserved();
                     }
-                    catch
-                    {
-                    }
+                    catch { }
                 };
             }
             catch (Exception ex)

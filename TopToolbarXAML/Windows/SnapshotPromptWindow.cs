@@ -15,7 +15,9 @@ namespace TopToolbar
     {
         public static async Task<string> ShowAsync(WindowEx owner)
         {
-            using var overlay = await TransparentOverlayHost.CreateAsync(owner).ConfigureAwait(true);
+            using var overlay = await TransparentOverlayHost
+                .CreateAsync(owner)
+                .ConfigureAwait(true);
             if (overlay == null)
             {
                 return null;
@@ -33,14 +35,14 @@ namespace TopToolbar
                     return nameBox.Text?.Trim();
                 }
             }
-            catch (Exception)
-            {
-            }
+            catch (Exception) { }
 
             return null;
         }
 
-        private static (ContentDialog Dialog, TextBox NameBox) CreateDialog(FrameworkElement rootElement)
+        private static (ContentDialog Dialog, TextBox NameBox) CreateDialog(
+            FrameworkElement rootElement
+        )
         {
             var nameBox = new TextBox
             {
@@ -58,18 +60,17 @@ namespace TopToolbar
                 FontSize = 12,
             };
 
-            var content = new StackPanel
-            {
-                Spacing = 12,
-            };
+            var content = new StackPanel { Spacing = 12 };
 
-            content.Children.Add(new TextBlock
-            {
-                Text = "Workspace name",
-                Margin = new Thickness(0, 0, 0, 2),
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                FontSize = 13,
-            });
+            content.Children.Add(
+                new TextBlock
+                {
+                    Text = "Workspace name",
+                    Margin = new Thickness(0, 0, 0, 2),
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    FontSize = 13,
+                }
+            );
             content.Children.Add(nameBox);
             content.Children.Add(errorText);
 
