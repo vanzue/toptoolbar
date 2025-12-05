@@ -5,34 +5,17 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using TopToolbar;
 using TopToolbar.Models.Providers;
+using TopToolbar.Serialization;
 
 namespace TopToolbar.Services.Providers
 {
     internal sealed class WorkspaceProviderConfigStore
     {
         private const string WorkspaceProviderFileName = "WorkspaceProvider.json";
-
-        private static readonly JsonSerializerOptions ReadOptions = new()
-        {
-            PropertyNameCaseInsensitive = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            Converters =
-            {
-                new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
-            },
-        };
-
-        private static readonly JsonSerializerOptions WriteOptions = new(ReadOptions)
-        {
-            WriteIndented = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        };
 
         private readonly string _filePath;
 
@@ -55,7 +38,7 @@ namespace TopToolbar.Services.Providers
             try
             {
                 await using var stream = new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                var config = await JsonSerializer.DeserializeAsync<WorkspaceProviderConfig>(stream, ReadOptions, cancellationToken).ConfigureAwait(false);
+                var config = await JsonSerializer.DeserializeAsync(stream, WorkspaceProviderJsonContext.Default.WorkspaceProviderConfig, cancellationToken).ConfigureAwait(false);
                 return config ?? CreateDefaultConfig();
             }
             catch (JsonException)
@@ -83,7 +66,7 @@ namespace TopToolbar.Services.Providers
             var tempPath = _filePath + ".tmp";
             await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
-                await JsonSerializer.SerializeAsync(stream, config, WriteOptions, cancellationToken).ConfigureAwait(false);
+                await JsonSerializer.SerializeAsync(stream, config, WorkspaceProviderJsonContext.Default.WorkspaceProviderConfig, cancellationToken).ConfigureAwait(false);
             }
 
             File.Copy(tempPath, _filePath, overwrite: true);

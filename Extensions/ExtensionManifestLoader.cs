@@ -6,18 +6,12 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
+using TopToolbar.Serialization;
 
 namespace TopToolbar.Extensions
 {
     public static class ExtensionManifestLoader
     {
-        private static readonly JsonSerializerOptions Options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            AllowTrailingCommas = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-        };
-
         public static async Task<ExtensionManifest> LoadAsync(string manifestPath)
         {
             if (string.IsNullOrWhiteSpace(manifestPath))
@@ -26,7 +20,7 @@ namespace TopToolbar.Extensions
             }
 
             await using var stream = File.OpenRead(manifestPath);
-            var manifest = await JsonSerializer.DeserializeAsync<ExtensionManifest>(stream, Options).ConfigureAwait(false);
+            var manifest = await JsonSerializer.DeserializeAsync(stream, ExtensionManifestJsonContext.Default.ExtensionManifest).ConfigureAwait(false);
             return manifest ?? new ExtensionManifest();
         }
     }

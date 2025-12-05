@@ -12,6 +12,7 @@ using System.Text.Json.Serialization;
 using TopToolbar.Logging;
 using TopToolbar.Models;
 using TopToolbar.Providers.Configuration;
+using TopToolbar.Serialization;
 
 namespace TopToolbar.Services;
 
@@ -20,7 +21,7 @@ public sealed class ProviderConfigService
     private readonly string _userDirectory;
     private readonly string _defaultDirectory;
 
-    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+    private static readonly JsonSerializerOptions JsonOptions = ProviderConfigJsonContext.Default.Options;
 
     public ProviderConfigService(string userDirectory = null, string defaultDirectory = null)
     {
@@ -324,17 +325,4 @@ public sealed class ProviderConfigService
         }
     }
 
-    private static JsonSerializerOptions CreateJsonOptions()
-    {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true,
-        };
-
-        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-
-        return options;
-    }
 }

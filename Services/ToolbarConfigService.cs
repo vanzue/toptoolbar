@@ -9,6 +9,7 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using TopToolbar.Models;
+using TopToolbar.Serialization;
 
 namespace TopToolbar.Services
 {
@@ -18,12 +19,7 @@ namespace TopToolbar.Services
 
         public string ConfigPath => _configPath;
 
-        private static readonly JsonSerializerOptions JsonOptions = new()
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            AllowTrailingCommas = true,
-        };
+        private static readonly JsonSerializerOptions JsonOptions = ToolbarConfigJsonContext.Default.Options;
 
         public ToolbarConfigService(string configPath = "")
         {
@@ -44,7 +40,7 @@ namespace TopToolbar.Services
             }
 
             await using var stream = File.OpenRead(_configPath);
-            config = await JsonSerializer.DeserializeAsync<ToolbarConfig>(stream, JsonOptions) ?? new ToolbarConfig();
+            config = await JsonSerializer.DeserializeAsync(stream, ToolbarConfigJsonContext.Default.ToolbarConfig) ?? new ToolbarConfig();
             EnsureDefaults(config);
             return config;
         }
@@ -53,7 +49,7 @@ namespace TopToolbar.Services
         {
             EnsureDefaults(config);
             await using var stream = File.Create(_configPath);
-            await JsonSerializer.SerializeAsync(stream, config, JsonOptions);
+            await JsonSerializer.SerializeAsync(stream, config, ToolbarConfigJsonContext.Default.ToolbarConfig);
         }
 
         private static void EnsureDefaults(ToolbarConfig config)

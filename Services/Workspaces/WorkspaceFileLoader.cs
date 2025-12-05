@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using TopToolbar.Models.Providers;
 using TopToolbar.Services.Providers;
+using TopToolbar.Serialization;
 
 namespace TopToolbar.Services.Workspaces
 {
@@ -199,8 +200,8 @@ namespace TopToolbar.Services.Workspaces
                 return null;
             }
 
-            var json = JsonSerializer.Serialize(workspace);
-            return JsonSerializer.Deserialize<WorkspaceDefinition>(json);
+            var json = JsonSerializer.Serialize(workspace, DefaultJsonContext.Default.WorkspaceDefinition);
+            return JsonSerializer.Deserialize(json, DefaultJsonContext.Default.WorkspaceDefinition);
         }
     }
 }

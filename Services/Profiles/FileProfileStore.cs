@@ -7,9 +7,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using TopToolbar.Logging;
 using TopToolbar.Services.Profiles.Models;
+using TopToolbar.Serialization;
 
 namespace TopToolbar.Services.Profiles;
 
@@ -26,14 +26,7 @@ public sealed class FileProfileStore : IProfileStore
         _profilesDirectory = Path.Combine(root, "profiles");
         Directory.CreateDirectory(_profilesDirectory);
 
-        _jsonOptions = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNameCaseInsensitive = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true,
-        };
-        _jsonOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        _jsonOptions = ProfilesJsonContext.Default.Options;
     }
 
     public ProfileOverridesFile Load(string profileId)

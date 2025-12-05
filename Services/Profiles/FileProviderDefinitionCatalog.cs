@@ -7,9 +7,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using TopToolbar.Logging;
 using TopToolbar.Services.Profiles.Models;
+using TopToolbar.Serialization;
 
 namespace TopToolbar.Services.Profiles;
 
@@ -28,13 +28,7 @@ public sealed class FileProviderDefinitionCatalog : IProviderDefinitionCatalog
             ? AppPaths.ProviderDefinitionsDirectory
             : providersDirectory;
 
-        _jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true,
-        };
-        _jsonOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        _jsonOptions = ProfilesJsonContext.Default.Options;
 
         try
         {

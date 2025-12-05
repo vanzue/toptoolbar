@@ -10,6 +10,7 @@ using System.Text.Json;
 using TopToolbar.Logging;
 using TopToolbar.Models;
 using TopToolbar.Services.Profiles.Models;
+using TopToolbar.Serialization;
 
 namespace TopToolbar.Services.Profiles;
 
@@ -31,11 +32,7 @@ public class ProfileFileService : IDisposable
         _profileRegistry = profileRegistry ?? new FileProfileRegistry();
         Directory.CreateDirectory(_configDirectory);
 
-        _jsonOptions = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        };
+        _jsonOptions = ProfileFileJsonContext.Default.Options;
     }
 
     private static string GetDefaultDataDirectory()
@@ -107,7 +104,7 @@ public class ProfileFileService : IDisposable
         {
             profile.ModifiedAt = DateTime.UtcNow;
             var filePath = GetProfileFilePath(profile.Id);
-            var json = JsonSerializer.Serialize(profile, _jsonOptions);
+            var json = JsonSerializer.Serialize(profile, ProfileFileJsonContext.Default.Profile);
             File.WriteAllText(filePath, json);
         }
         catch (Exception ex)
@@ -196,7 +193,7 @@ public class ProfileFileService : IDisposable
             }
 
             var json = File.ReadAllText(filePath);
-            var profile = JsonSerializer.Deserialize<Profile>(json, _jsonOptions);
+            var profile = JsonSerializer.Deserialize(json, ProfileFileJsonContext.Default.Profile);
 
             // Ensure workspace groups exist with all actions enabled
             if (profile != null)
