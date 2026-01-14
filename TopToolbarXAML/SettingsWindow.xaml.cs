@@ -31,7 +31,6 @@ namespace TopToolbar
 {
     public sealed partial class SettingsWindow : WinUIEx.WindowEx, IDisposable
     {
-        private const bool ProfilesEnabled = false;
         private readonly SettingsViewModel _vm;
         private bool _isClosed;
         private bool _disposed;
@@ -39,10 +38,7 @@ namespace TopToolbar
 
         public SettingsViewModel ViewModel => _vm;
 
-        public SettingsWindow(
-            Services.Profiles.IProfileRuntime profileRuntime = null,
-            Services.Profiles.IProfileManager profileManager = null
-        )
+        public SettingsWindow()
         {
             InitializeComponent();
 

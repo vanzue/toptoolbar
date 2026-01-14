@@ -65,28 +65,6 @@ internal partial class ToolbarConfigJsonContext : JsonSerializerContext
 }
 
 [JsonSourceGenerationOptions(
-    PropertyNameCaseInsensitive = true,
-    AllowTrailingCommas = true,
-    ReadCommentHandling = JsonCommentHandling.Skip,
-    WriteIndented = true,
-    GenerationMode = JsonSourceGenerationMode.Metadata)]
-[JsonSerializable(typeof(TopToolbar.Services.Profiles.Models.ProviderDefinitionFile))]
-[JsonSerializable(typeof(TopToolbar.Services.Profiles.Models.ProfilesRegistry))]
-[JsonSerializable(typeof(TopToolbar.Services.Profiles.Models.ProfileOverridesFile))]
-internal partial class ProfilesJsonContext : JsonSerializerContext
-{
-}
-
-[JsonSourceGenerationOptions(
-    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
-    WriteIndented = true,
-    GenerationMode = JsonSourceGenerationMode.Metadata)]
-[JsonSerializable(typeof(TopToolbar.Models.Profile))]
-internal partial class ProfileFileJsonContext : JsonSerializerContext
-{
-}
-
-[JsonSourceGenerationOptions(
     GenerationMode = JsonSourceGenerationMode.Metadata,
     Converters = new[] { typeof(ProviderIconTypeConverter) })]
 [JsonSerializable(typeof(TopToolbar.Services.Workspaces.WorkspaceDefinition))]

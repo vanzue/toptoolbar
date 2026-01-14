@@ -4,9 +4,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using TopToolbar.Logging;
-using TopToolbar.Models;
 
 namespace TopToolbar.Providers
 {
@@ -63,34 +61,6 @@ namespace TopToolbar.Providers
                     }
                 }
             }
-        }
-
-        /// <summary>
-        /// Gets default profile groups for all built-in providers
-        /// </summary>
-        public async Task<List<ProfileGroup>> GetDefaultProfileGroupsAsync()
-        {
-            var groups = new List<ProfileGroup>();
-
-            // Get workspace groups
-            try
-            {
-                var workspaceGroups = await WorkspaceProvider.GetDefaultWorkspaceGroupsAsync();
-                groups.AddRange(workspaceGroups);
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    AppLogger.LogWarning($"BuiltinProvider: Failed to get workspace groups: {ex.Message}");
-                }
-                catch
-                {
-                    // Ignore logging errors
-                }
-            }
-
-            return groups;
         }
 
         /// <summary>
