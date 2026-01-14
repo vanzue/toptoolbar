@@ -8,11 +8,83 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using TopToolbar.Logging;
 
 namespace TopToolbar.Providers.External.Mcp;
+
+// AOT-compatible JSON context for MCP protocol
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    GenerationMode = JsonSourceGenerationMode.Default)]
+[JsonSerializable(typeof(JsonRpcRequest))]
+[JsonSerializable(typeof(McpInitializeParams))]
+[JsonSerializable(typeof(McpToolCallParams))]
+[JsonSerializable(typeof(McpEmptyParams))]
+internal partial class McpJsonContext : JsonSerializerContext
+{
+}
+
+internal sealed class JsonRpcRequest
+{
+    [JsonPropertyName("jsonrpc")]
+    public string JsonRpc { get; set; }
+
+    [JsonPropertyName("id")]
+    public long? Id { get; set; }
+
+    [JsonPropertyName("method")]
+    public string Method { get; set; }
+
+    [JsonPropertyName("params")]
+    public JsonNode Params { get; set; }
+}
+
+internal sealed class McpInitializeParams
+{
+    [JsonPropertyName("protocolVersion")]
+    public string ProtocolVersion { get; set; }
+
+    [JsonPropertyName("capabilities")]
+    public McpCapabilities Capabilities { get; set; }
+
+    [JsonPropertyName("clientInfo")]
+    public McpClientInfo ClientInfo { get; set; }
+}
+
+internal sealed class McpCapabilities
+{
+    [JsonPropertyName("tools")]
+    public JsonObject Tools { get; set; } = new();
+
+    [JsonPropertyName("resources")]
+    public JsonObject Resources { get; set; } = new();
+}
+
+internal sealed class McpClientInfo
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; }
+}
+
+internal sealed class McpToolCallParams
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("arguments")]
+    public JsonNode Arguments { get; set; }
+}
+
+internal sealed class McpEmptyParams
+{
+}
 
 internal sealed class McpClient : IDisposable
 {
@@ -164,10 +236,10 @@ internal sealed class McpClient : IDisposable
                 JsonRpc = "2.0",
                 Id = null,
                 Method = method,
-                Params = parameters,
+                Params = JsonSerializer.SerializeToNode(parameters, _jsonOptions),
             };
 
-            var json = JsonSerializer.Serialize(notification, _jsonOptions);
+            var json = JsonSerializer.Serialize(notification, McpJsonContext.Default.JsonRpcRequest);
             await _writer.WriteLineAsync(json).ConfigureAwait(false);
         }
         finally
@@ -192,10 +264,10 @@ internal sealed class McpClient : IDisposable
                 JsonRpc = "2.0",
                 Id = id,
                 Method = method,
-                Params = parameters,
+                Params = parameters != null ? JsonSerializer.SerializeToNode(parameters, _jsonOptions) : null,
             };
 
-            var json = JsonSerializer.Serialize(request, _jsonOptions);
+            var json = JsonSerializer.Serialize(request, McpJsonContext.Default.JsonRpcRequest);
             await _writer.WriteLineAsync(json).ConfigureAwait(false);
         }
         finally
@@ -351,16 +423,5 @@ internal sealed class McpClient : IDisposable
         _writeLock.Dispose();
         _connectLock.Dispose();
         _lifetimeCts.Dispose();
-    }
-
-    private sealed class JsonRpcRequest
-    {
-        public string JsonRpc { get; set; }
-
-        public long? Id { get; set; }
-
-        public string Method { get; set; }
-
-        public object Params { get; set; }
     }
 }

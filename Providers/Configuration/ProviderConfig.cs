@@ -24,5 +24,4 @@ public sealed class ProviderConfig
 public enum ExternalProviderType
 {
     None = 0,
-    Mcp = 1,
 }

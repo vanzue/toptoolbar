@@ -3,25 +3,17 @@ using System.Text.Json.Serialization;
 
 namespace TopToolbar.Serialization;
 
-internal sealed class CamelCaseStringEnumConverter : JsonStringEnumConverter
+internal sealed class ProviderIconTypeConverter : JsonStringEnumConverter<TopToolbar.Models.Providers.ProviderIconType>
 {
-    public CamelCaseStringEnumConverter()
-        : base(JsonNamingPolicy.CamelCase)
-    {
-    }
-}
-
-internal sealed class CamelCaseStringEnumConverterDisallowInts : JsonStringEnumConverter
-{
-    public CamelCaseStringEnumConverterDisallowInts()
+    public ProviderIconTypeConverter()
         : base(JsonNamingPolicy.CamelCase, allowIntegerValues: false)
     {
     }
 }
 
-internal sealed class ProviderIconTypeConverter : JsonStringEnumConverter<TopToolbar.Models.Providers.ProviderIconType>
+internal sealed class ExternalProviderTypeConverter : JsonStringEnumConverter<TopToolbar.Providers.Configuration.ExternalProviderType>
 {
-    public ProviderIconTypeConverter()
+    public ExternalProviderTypeConverter()
         : base(JsonNamingPolicy.CamelCase, allowIntegerValues: false)
     {
     }
@@ -46,7 +38,7 @@ internal partial class ExtensionManifestJsonContext : JsonSerializerContext
     Converters = new[] { typeof(ProviderIconTypeConverter) },
     GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(TopToolbar.Models.Providers.WorkspaceProviderConfig))]
-[JsonSerializable(typeof(TopToolbar.Models.Providers.WorkspaceDefinition))]
+[JsonSerializable(typeof(TopToolbar.Services.Workspaces.WorkspaceDefinition))]
 internal partial class WorkspaceProviderJsonContext : JsonSerializerContext
 {
 }
@@ -55,10 +47,9 @@ internal partial class WorkspaceProviderJsonContext : JsonSerializerContext
     PropertyNameCaseInsensitive = true,
     AllowTrailingCommas = true,
     ReadCommentHandling = JsonCommentHandling.Skip,
-    Converters = new[] { typeof(CamelCaseStringEnumConverter) },
+    Converters = new[] { typeof(ExternalProviderTypeConverter) },
     GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(TopToolbar.Providers.Configuration.ProviderConfig))]
-[JsonSerializable(typeof(TopToolbar.Providers.Configuration.McpProviderConfig))]
 internal partial class ProviderConfigJsonContext : JsonSerializerContext
 {
 }
@@ -78,7 +69,6 @@ internal partial class ToolbarConfigJsonContext : JsonSerializerContext
     AllowTrailingCommas = true,
     ReadCommentHandling = JsonCommentHandling.Skip,
     WriteIndented = true,
-    Converters = new[] { typeof(CamelCaseStringEnumConverter) },
     GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(TopToolbar.Services.Profiles.Models.ProviderDefinitionFile))]
 [JsonSerializable(typeof(TopToolbar.Services.Profiles.Models.ProfilesRegistry))]
@@ -99,7 +89,16 @@ internal partial class ProfileFileJsonContext : JsonSerializerContext
 [JsonSourceGenerationOptions(
     GenerationMode = JsonSourceGenerationMode.Metadata,
     Converters = new[] { typeof(ProviderIconTypeConverter) })]
-[JsonSerializable(typeof(TopToolbar.Models.Providers.WorkspaceDefinition))]
+[JsonSerializable(typeof(TopToolbar.Services.Workspaces.WorkspaceDefinition))]
 internal partial class DefaultJsonContext : JsonSerializerContext
+{
+}
+
+// AOT-compatible context for deep cloning workspace types
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Default)]
+[JsonSerializable(typeof(TopToolbar.Services.Workspaces.WorkspaceDefinition))]
+[JsonSerializable(typeof(TopToolbar.Services.Workspaces.ApplicationDefinition))]
+[JsonSerializable(typeof(TopToolbar.Services.Workspaces.MonitorDefinition))]
+internal partial class DeepCloneJsonContext : JsonSerializerContext
 {
 }

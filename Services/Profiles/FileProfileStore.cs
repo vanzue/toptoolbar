@@ -48,7 +48,14 @@ public sealed class FileProfileStore : IProfileStore
             }
 
             using var stream = File.OpenRead(path);
-            var loaded = JsonSerializer.Deserialize<ProfileOverridesFile>(stream, _jsonOptions) ?? CreateEmpty(profileId);
+            var loaded = JsonSerializer.Deserialize(stream, ProfilesJsonContext.Default.ProfileOverridesFile);
+            if (loaded == null)
+            {
+                var created = CreateEmpty(profileId);
+                Save(created);
+                return created;
+            }
+
             Normalize(loaded);
             loaded.ProfileId = profileId; // enforce
             return loaded;
@@ -74,7 +81,7 @@ public sealed class FileProfileStore : IProfileStore
         {
             using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.Read))
             {
-                JsonSerializer.Serialize(stream, file, _jsonOptions);
+                JsonSerializer.Serialize(stream, file, ProfilesJsonContext.Default.ProfileOverridesFile);
             }
 
             // Atomic move operation

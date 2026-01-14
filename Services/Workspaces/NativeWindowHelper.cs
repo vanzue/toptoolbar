@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -13,6 +14,7 @@ using System.Threading.Tasks;
 
 namespace TopToolbar.Services.Workspaces
 {
+    [SuppressMessage("Trimming", "IL2050:Correctness of COM interop cannot be guaranteed after trimming", Justification = "IPropertyStore COM interface preserved manually")]
     internal static class NativeWindowHelper
     {
         private const int SwShowNormal = 1;

@@ -15,6 +15,7 @@ using Microsoft.UI.Dispatching;
 using TopToolbar.Logging;
 using TopToolbar.Models;
 using TopToolbar.Models.Providers;
+using TopToolbar.Serialization;
 using TopToolbar.Services;
 using TopToolbar.Services.Providers;
 using TopToolbar.Services.Workspaces;
@@ -550,7 +551,30 @@ namespace TopToolbar.ViewModels
                 return default;
             }
 
-            return JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value));
+            // AOT-compatible deep clone for known types
+            if (value is WorkspaceDefinition wd)
+            {
+                return (T)(object)JsonSerializer.Deserialize(
+                    JsonSerializer.Serialize(wd, DeepCloneJsonContext.Default.WorkspaceDefinition),
+                    DeepCloneJsonContext.Default.WorkspaceDefinition);
+            }
+
+            if (value is ApplicationDefinition ad)
+            {
+                return (T)(object)JsonSerializer.Deserialize(
+                    JsonSerializer.Serialize(ad, DeepCloneJsonContext.Default.ApplicationDefinition),
+                    DeepCloneJsonContext.Default.ApplicationDefinition);
+            }
+
+            if (value is MonitorDefinition md)
+            {
+                return (T)(object)JsonSerializer.Deserialize(
+                    JsonSerializer.Serialize(md, DeepCloneJsonContext.Default.MonitorDefinition),
+                    DeepCloneJsonContext.Default.MonitorDefinition);
+            }
+
+            // Fallback for other types (will not work with AOT but keeps existing behavior)
+            throw new NotSupportedException($"DeepClone does not support type {typeof(T).Name} in AOT mode.");
         }
 
         private static string BuildWorkspaceButtonId(string workspaceId)

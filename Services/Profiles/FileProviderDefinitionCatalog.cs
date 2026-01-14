@@ -64,7 +64,7 @@ public sealed class FileProviderDefinitionCatalog : IProviderDefinitionCatalog
             try
             {
                 using var stream = File.OpenRead(file);
-                var def = JsonSerializer.Deserialize<ProviderDefinitionFile>(stream, _jsonOptions);
+                var def = JsonSerializer.Deserialize(stream, ProfilesJsonContext.Default.ProviderDefinitionFile);
                 if (def == null || string.IsNullOrWhiteSpace(def.ProviderId))
                 {
                     continue;

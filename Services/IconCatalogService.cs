@@ -152,7 +152,7 @@ namespace TopToolbar.Services
 
         private static IEnumerable<IconCatalogEntry> BuildGlyphCatalogEntries()
         {
-            foreach (Symbol symbol in Enum.GetValues(typeof(Symbol)))
+            foreach (Symbol symbol in Enum.GetValues<Symbol>())
             {
                 var codepoint = (int)symbol;
                 if (codepoint <= 0)

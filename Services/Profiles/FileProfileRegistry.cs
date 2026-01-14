@@ -41,7 +41,12 @@ public sealed class FileProfileRegistry : IProfileRegistry
             }
 
             using var stream = File.OpenRead(_registryPath);
-            var loaded = JsonSerializer.Deserialize<ProfilesRegistry>(stream, _jsonOptions) ?? CreateDefault();
+            var loaded = JsonSerializer.Deserialize(stream, ProfilesJsonContext.Default.ProfilesRegistry);
+            if (loaded == null)
+            {
+                return CreateDefault();
+            }
+
             Normalize(loaded);
 
             var needsSave = false;
@@ -85,7 +90,7 @@ public sealed class FileProfileRegistry : IProfileRegistry
         {
             using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.Read))
             {
-                JsonSerializer.Serialize(stream, registry, _jsonOptions);
+                JsonSerializer.Serialize(stream, registry, ProfilesJsonContext.Default.ProfilesRegistry);
             }
 
             // Atomic move operation

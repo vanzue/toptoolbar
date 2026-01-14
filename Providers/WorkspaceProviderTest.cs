@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using TopToolbar.Models;
@@ -14,6 +15,27 @@ using TopToolbar.Services.Profiles;
 
 namespace TopToolbar.Test
 {
+    // AOT-compatible test workspace models
+    internal sealed class TestWorkspaceItem
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+    }
+
+    internal sealed class TestWorkspacesFile
+    {
+        [JsonPropertyName("workspaces")]
+        public List<TestWorkspaceItem> Workspaces { get; set; } = new();
+    }
+
+    [JsonSerializable(typeof(TestWorkspacesFile))]
+    internal partial class TestWorkspacesJsonContext : JsonSerializerContext
+    {
+    }
+
     internal sealed class WorkspaceProviderTest
     {
         /// <summary>
@@ -32,16 +54,16 @@ namespace TopToolbar.Test
                 Directory.CreateDirectory(testProfileDir);
 
                 // Create initial workspace data
-                var initialWorkspaces = new
+                var initialWorkspaces = new TestWorkspacesFile
                 {
-                    workspaces = new[]
+                    Workspaces = new List<TestWorkspaceItem>
                     {
-                        new { id = "workspace1", name = "Development" },
-                        new { id = "workspace2", name = "Research" },
+                        new TestWorkspaceItem { Id = "workspace1", Name = "Development" },
+                        new TestWorkspaceItem { Id = "workspace2", Name = "Research" },
                     },
                 };
 
-                await File.WriteAllTextAsync(testWorkspacePath, JsonSerializer.Serialize(initialWorkspaces));
+                await File.WriteAllTextAsync(testWorkspacePath, JsonSerializer.Serialize(initialWorkspaces, TestWorkspacesJsonContext.Default.TestWorkspacesFile));
 
                 // Create test profile service
                 var profileFileService = new ProfileFileService(testProfileDir);
@@ -57,17 +79,17 @@ namespace TopToolbar.Test
                 await Task.Delay(100);
 
                 // Simulate workspace changes - add a new workspace
-                var updatedWorkspaces = new
+                var updatedWorkspaces = new TestWorkspacesFile
                 {
-                    workspaces = new[]
+                    Workspaces = new List<TestWorkspaceItem>
                     {
-                        new { id = "workspace1", name = "Development" },
-                        new { id = "workspace2", name = "Research" },
-                        new { id = "workspace3", name = "Testing" }, // New workspace
+                        new TestWorkspaceItem { Id = "workspace1", Name = "Development" },
+                        new TestWorkspaceItem { Id = "workspace2", Name = "Research" },
+                        new TestWorkspaceItem { Id = "workspace3", Name = "Testing" }, // New workspace
                     },
                 };
 
-                await File.WriteAllTextAsync(testWorkspacePath, JsonSerializer.Serialize(updatedWorkspaces));
+                await File.WriteAllTextAsync(testWorkspacePath, JsonSerializer.Serialize(updatedWorkspaces, TestWorkspacesJsonContext.Default.TestWorkspacesFile));
 
                 // Wait for file watcher to trigger
                 await Task.Delay(500);
