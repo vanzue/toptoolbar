@@ -45,12 +45,23 @@ namespace TopToolbar.Services.Workspaces
 
         private readonly WorkspaceFileLoader _fileLoader;
         private readonly WindowTracker _windowTracker;
+        private readonly ManagedWindowRegistry _managedWindows;
         private bool _disposed;
 
         public WorkspacesRuntimeService(string workspacesPath = null)
         {
             _fileLoader = new WorkspaceFileLoader(workspacesPath);
             _windowTracker = new WindowTracker();
+            _managedWindows = new ManagedWindowRegistry();
+            
+            // Subscribe to window destruction events to keep ManagedWindowRegistry in sync
+            _windowTracker.WindowDestroyed += OnWindowDestroyed;
+        }
+
+        private void OnWindowDestroyed(IntPtr hwnd)
+        {
+            // When a window is destroyed, remove it from the managed registry
+            _managedWindows.UnbindWindow(hwnd);
         }
 
         public async Task<WorkspaceDefinition> SnapshotAsync(
@@ -133,7 +144,46 @@ namespace TopToolbar.Services.Workspaces
             await _fileLoader
                 .SaveWorkspaceAsync(workspace, cancellationToken)
                 .ConfigureAwait(false);
+
+            // Bind snapshotted windows to their app configurations
+            BindSnapshotWindows(workspace);
+
             return workspace;
+        }
+
+        private void BindSnapshotWindows(WorkspaceDefinition workspace)
+        {
+            if (workspace?.Applications == null)
+            {
+                return;
+            }
+
+            var windows = _windowTracker.GetSnapshot();
+            foreach (var app in workspace.Applications)
+            {
+                if (string.IsNullOrWhiteSpace(app?.Id))
+                {
+                    continue;
+                }
+
+                // Find the window that matches this app by title (most specific match)
+                foreach (var window in windows)
+                {
+                    if (window == null || window.Handle == IntPtr.Zero)
+                    {
+                        continue;
+                    }
+
+                    // Match by title first (most specific)
+                    if (!string.IsNullOrWhiteSpace(app.Title) && 
+                        !string.IsNullOrWhiteSpace(window.Title) &&
+                        string.Equals(window.Title, app.Title, StringComparison.Ordinal))
+                    {
+                        _managedWindows.BindWindow(workspace.Id, app.Id, window.Handle);
+                        break;
+                    }
+                }
+            }
         }
 
         private bool ShouldCaptureWindow(
@@ -521,6 +571,7 @@ namespace TopToolbar.Services.Workspaces
             }
 
             _disposed = true;
+            _windowTracker.WindowDestroyed -= OnWindowDestroyed;
             _windowTracker.Dispose();
             GC.SuppressFinalize(this);
         }

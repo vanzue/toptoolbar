@@ -249,6 +249,7 @@ namespace TopToolbar.Services.Workspaces
         {
             if (hwnd == IntPtr.Zero || position == null || position.IsEmpty)
             {
+                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: skipped - hwnd={hwnd}, position={position?.X},{position?.Y},{position?.Width},{position?.Height}, isEmpty={position?.IsEmpty}");
                 return;
             }
 
@@ -259,6 +260,7 @@ namespace TopToolbar.Services.Workspaces
 
             if (!EnsureWindowVisible(hwnd))
             {
+                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: EnsureWindowVisible failed for hwnd={hwnd}");
                 return;
             }
 
@@ -274,21 +276,30 @@ namespace TopToolbar.Services.Workspaces
 
             if (!placementApplied)
             {
-                return;
+                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: SetWindowPos failed for hwnd={hwnd}, but will still try ShowWindow");
+                // Don't return here - still try to minimize/maximize even if position failed
+                // This can happen with elevated windows (UIPI)
             }
 
+            TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: hwnd={hwnd}, minimize={minimize}, maximize={maximize}");
             if (minimize)
             {
-                _ = ShowWindow(hwnd, SwShowMinimized);
+                var result = ShowWindow(hwnd, SwShowMinimized);
+                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: ShowWindow(minimized) result={result}");
             }
             else if (maximize)
             {
-                _ = ShowWindow(hwnd, SwShowMaximized);
+                var result = ShowWindow(hwnd, SwShowMaximized);
+                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: ShowWindow(maximized) result={result}");
             }
             else
             {
-                _ = ShowWindow(hwnd, SwShowNormal);
-                VerifyWindowPlacementWithRetry(hwnd, position);
+                var result = ShowWindow(hwnd, SwShowNormal);
+                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: ShowWindow(normal) result={result}");
+                if (placementApplied)
+                {
+                    VerifyWindowPlacementWithRetry(hwnd, position);
+                }
             }
         }
 

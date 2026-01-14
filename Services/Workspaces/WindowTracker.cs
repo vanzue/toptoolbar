@@ -29,6 +29,11 @@ namespace TopToolbar.Services.Workspaces
         private readonly WinEventDelegate _winEventCallback;
         private bool _disposed;
 
+        /// <summary>
+        /// Raised when a window is destroyed.
+        /// </summary>
+        public event Action<IntPtr> WindowDestroyed;
+
         public WindowTracker()
         {
             _winEventCallback = OnWinEvent;
@@ -222,9 +227,23 @@ namespace TopToolbar.Services.Workspaces
                 return;
             }
 
+            bool removed;
             lock (_gate)
             {
-                _ = _windows.Remove(hwnd);
+                removed = _windows.Remove(hwnd);
+            }
+
+            // Notify listeners that the window was destroyed
+            if (removed)
+            {
+                try
+                {
+                    WindowDestroyed?.Invoke(hwnd);
+                }
+                catch
+                {
+                    // Don't let subscriber exceptions crash the hook
+                }
             }
         }
 
