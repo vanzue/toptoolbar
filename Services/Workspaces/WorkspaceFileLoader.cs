@@ -149,7 +149,7 @@ namespace TopToolbar.Services.Workspaces
                         : workspace.Name,
                     Description = workspace.Id,
                     Enabled = true,
-                    Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F1" },
+                    Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F4" },
                 };
 
                 config.Buttons.Add(button);

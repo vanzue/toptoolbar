@@ -274,7 +274,7 @@ namespace TopToolbar.Providers
                     Kind = ActionKind.Launch,
                     GroupHint = "workspaces",
                     Order = order++,
-                    Icon = new ActionIcon { Type = ActionIconType.Glyph, Value = "\uE7F1" },
+                    Icon = new ActionIcon { Type = ActionIconType.Glyph, Value = "\uE7F4" },
                     CanExecute = true,
                 };
 
@@ -321,7 +321,7 @@ namespace TopToolbar.Providers
                         Name = string.IsNullOrWhiteSpace(ws.Name) ? ws.Id : ws.Name,
                         Description = ws.Id,
                         Enabled = true,
-                        Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F1" },
+                        Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F4" },
                     })
                     .ToList();
 
@@ -358,7 +358,7 @@ namespace TopToolbar.Providers
                     Id = BuildButtonIdInternal(workspaceId),
                     Name = displayName,
                     Description = description,
-                    IconGlyph = "\uE7F1",
+                    IconGlyph = "\uE7F4",
                     IconType = ToolbarIconType.Catalog,
                     Action = new ToolbarAction
                     {
@@ -404,7 +404,7 @@ namespace TopToolbar.Providers
             {
                 if (string.IsNullOrWhiteSpace(button.IconGlyph))
                 {
-                    button.IconGlyph = "\uE7F1";
+                    button.IconGlyph = "\uE7F4";
                 }
 
                 button.IconType = ToolbarIconType.Catalog;
@@ -451,7 +451,7 @@ namespace TopToolbar.Providers
 
             if (button.IconType != ToolbarIconType.Image && string.IsNullOrWhiteSpace(button.IconGlyph))
             {
-                button.IconGlyph = "\uE7F1";
+                button.IconGlyph = "\uE7F4";
             }
         }
 

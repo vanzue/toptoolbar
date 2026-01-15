@@ -40,6 +40,18 @@ namespace TopToolbar.Services
                 CreateSvg("workspace", "Workspace", "Layouts", "workspace", "snap", "arrange", "desktop"),
                 CreateSvg("tasks", "Tasks", "Productivity", "tasks", "todo", "list", "organize"),
                 CreateSvg("rocket", "Rocket", "Automation", "rocket", "deploy", "launch", "boost"),
+                
+                // Smart icon detection glyphs (Segoe Fluent Icons)
+                CreateGlyph("glyph-E774", "Globe", "Smart Icons", "\uE774", "globe", "web", "url", "link", "internet"),
+                CreateGlyph("glyph-E715", "Mail", "Smart Icons", "\uE715", "mail", "email", "mailto", "message"),
+                CreateGlyph("glyph-E188", "Folder", "Smart Icons", "\uE188", "folder", "directory", "path"),
+                CreateGlyph("glyph-E8A5", "Document", "Smart Icons", "\uE8A5", "document", "text", "file", "txt"),
+                CreateGlyph("glyph-EB9F", "Photo", "Smart Icons", "\uEB9F", "photo", "image", "picture", "png", "jpg"),
+                CreateGlyph("glyph-E714", "Video", "Smart Icons", "\uE714", "video", "movie", "mp4"),
+                CreateGlyph("glyph-E8D6", "Music", "Smart Icons", "\uE8D6", "music", "audio", "mp3", "sound"),
+                CreateGlyph("glyph-E756", "Code", "Smart Icons", "\uE756", "code", "script", "terminal", "cmd", "powershell"),
+                CreateGlyph("glyph-E7C3", "Page", "Smart Icons", "\uE7C3", "page", "file", "generic"),
+                CreateGlyph("glyph-E7AC", "App", "Smart Icons", "\uE7AC", "app", "application", "exe", "program"),
             };
 
             foreach (var glyphEntry in BuildGlyphCatalogEntries())
@@ -148,6 +160,18 @@ namespace TopToolbar.Services
         {
             var uri = new Uri($"ms-appx:///Assets/Icons/{fileName}.svg", UriKind.Absolute);
             return new IconCatalogEntry(id, name, category, uri, keywords ?? Array.Empty<string>());
+        }
+
+        private static IconCatalogEntry CreateGlyph(string id, string name, string category, string glyph, params string[] keywords)
+        {
+            return new IconCatalogEntry(
+                id: id,
+                displayName: name,
+                category: category,
+                resourceUri: null,
+                keywords: keywords ?? Array.Empty<string>(),
+                glyph: glyph,
+                fontFamily: "Segoe Fluent Icons,Segoe MDL2 Assets");
         }
 
         private static IEnumerable<IconCatalogEntry> BuildGlyphCatalogEntries()

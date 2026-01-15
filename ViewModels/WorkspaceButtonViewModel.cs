@@ -98,9 +98,9 @@ namespace TopToolbar.ViewModels
                 var icon = Icon;
                 return icon.Type switch
                 {
-                    ProviderIconType.Glyph => !string.IsNullOrWhiteSpace(icon.Glyph) ? icon.Glyph : "\uE7F1",
+                    ProviderIconType.Glyph => !string.IsNullOrWhiteSpace(icon.Glyph) ? icon.Glyph : "\uE7F4",
                     ProviderIconType.Catalog => ResolveCatalogGlyph(icon.CatalogId),
-                    _ => "\uE7F1",
+                    _ => "\uE7F4",
                 };
             }
         }
@@ -168,10 +168,11 @@ namespace TopToolbar.ViewModels
                 Config.Icon = new ProviderIcon();
             }
 
-            Icon.Type = ProviderIconType.Glyph;
-            Icon.Glyph = "\uE7F1";
+            // Use the workspace catalog icon
+            Icon.Type = ProviderIconType.Catalog;
+            Icon.Glyph = string.Empty;
             Icon.Path = string.Empty;
-            Icon.CatalogId = string.Empty;
+            Icon.CatalogId = "workspace";
             NotifyIconChanged();
         }
 
@@ -203,7 +204,7 @@ namespace TopToolbar.ViewModels
                 }
             }
 
-            return "\uE7F1";
+            return "\uE7F4";
         }
 
         private void NotifyIconChanged()

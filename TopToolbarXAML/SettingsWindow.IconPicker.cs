@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Text;
 using TopToolbar.Logging;
 using TopToolbar.Models;
 using TopToolbar.Services;
@@ -67,22 +68,20 @@ namespace TopToolbar
                 dialog.MaxWidth = 640;
                 dialog.MaxHeight = 600;
 
-                var iconTemplate = CreateIconPickerTemplate();
-
-                const string itemsPanelXaml = "<ItemsPanelTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'><ItemsWrapGrid Orientation='Horizontal' MaximumRowsOrColumns='0'/></ItemsPanelTemplate>";
-                var itemsPanel = (ItemsPanelTemplate)XamlReader.Load(itemsPanelXaml);
-
                 var gridView = new GridView
                 {
                     SelectionMode = ListViewSelectionMode.Single,
                     IsItemClickEnabled = true,
-                    ItemTemplate = iconTemplate,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     VerticalAlignment = VerticalAlignment.Stretch,
                     MinHeight = 280,
                     Padding = new Thickness(4, 0, 4, 4),
                 };
-                gridView.ItemsPanel = itemsPanel;
+
+                // Set up item template using code
+                gridView.ItemTemplate = CreateIconItemTemplate();
+                SetupIconGridViewItemBinding(gridView);
+
                 ScrollViewer.SetVerticalScrollMode(gridView, ScrollMode.Enabled);
                 ScrollViewer.SetVerticalScrollBarVisibility(gridView, ScrollBarVisibility.Auto);
                 ScrollViewer.SetHorizontalScrollMode(gridView, ScrollMode.Disabled);
@@ -296,6 +295,7 @@ namespace TopToolbar
             switch (target)
             {
                 case ToolbarButton button:
+                    button.IsIconCustomized = true;
                     if (!string.IsNullOrWhiteSpace(item.CatalogId))
                     {
                         _vm.TrySetCatalogIcon(button, item.CatalogId);
@@ -375,54 +375,121 @@ namespace TopToolbar
                 .ToList();
         }
 
-        private static DataTemplate CreateIconPickerTemplate()
+        private static DataTemplate CreateIconItemTemplate()
         {
+            // Create template with x:Bind style using Loaded event workaround
             const string templateXaml = @"<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
-                                                  xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'
-                                                  xmlns:media='using:Microsoft.UI.Xaml.Media.Imaging'>
-                <StackPanel Width='96'
-                            Height='120'
-                            HorizontalAlignment='Center'
-                            Spacing='6'>
-                    <Border Width='72'
-                            Height='72'
-                            CornerRadius='18'
-                            Background='{ThemeResource CardBackgroundFillColorDefaultBrush}'
-                            BorderBrush='{ThemeResource CardStrokeColorDefaultBrush}'
-                            BorderThickness='1'>
-                        <Grid>
-                            <Image Width='48'
-                                   Height='48'
-                                   HorizontalAlignment='Center'
-                                   VerticalAlignment='Center'
-                                   Stretch='Uniform'
-                                   Visibility='{Binding SvgVisibility}'>
-                                <Image.Source>
-                                    <media:SvgImageSource UriSource='{Binding ImageUri}'/>
-                                </Image.Source>
-                            </Image>
-                            <FontIcon Glyph='{Binding Glyph}'
-                                      FontFamily='Segoe Fluent Icons,Segoe MDL2 Assets'
-                                      FontSize='28'
-                                      HorizontalAlignment='Center'
-                                      VerticalAlignment='Center'
-                                      Foreground='{ThemeResource TextFillColorPrimaryBrush}'
-                                      Visibility='{Binding GlyphVisibility}' />
-                        </Grid>
+                                                  xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
+                <StackPanel x:Name='RootPanel' Width='96' Height='120' HorizontalAlignment='Center' Spacing='6' Tag='{Binding}'>
+                    <Border x:Name='IconBorder' Width='72' Height='72' CornerRadius='18' BorderThickness='1'>
+                        <Grid x:Name='IconHost'/>
                     </Border>
-                    <TextBlock Text='{Binding DisplayName}'
-                               TextAlignment='Center'
-                               FontWeight='SemiBold'
-                               TextWrapping='WrapWholeWords'/>
-                    <TextBlock Text='{Binding Category}'
-                               TextAlignment='Center'
-                               FontSize='10'
-                               Opacity='0.6'
-                               TextWrapping='WrapWholeWords'/>
+                    <TextBlock x:Name='NameText' TextAlignment='Center' FontWeight='SemiBold' TextWrapping='WrapWholeWords' MaxLines='2'/>
+                    <TextBlock x:Name='CategoryText' TextAlignment='Center' FontSize='10' Opacity='0.6' TextWrapping='NoWrap' TextTrimming='CharacterEllipsis'/>
                 </StackPanel>
             </DataTemplate>";
 
             return (DataTemplate)XamlReader.Load(templateXaml);
+        }
+
+        private void SetupIconGridViewItemBinding(GridView gridView)
+        {
+            gridView.ContainerContentChanging += (sender, args) =>
+            {
+                if (args.InRecycleQueue)
+                {
+                    return;
+                }
+
+                if (args.Phase == 0)
+                {
+                    args.RegisterUpdateCallback(PopulateIconItem);
+                    args.Handled = true;
+                }
+            };
+        }
+
+        private void PopulateIconItem(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.Item is not IconPickerItem item)
+            {
+                return;
+            }
+
+            var templateRoot = args.ItemContainer.ContentTemplateRoot as StackPanel;
+            if (templateRoot == null)
+            {
+                return;
+            }
+
+            // Find child elements by name
+            var iconBorder = templateRoot.FindName("IconBorder") as Border;
+            var iconHost = templateRoot.FindName("IconHost") as Grid;
+            var nameText = templateRoot.FindName("NameText") as TextBlock;
+            var categoryText = templateRoot.FindName("CategoryText") as TextBlock;
+
+            if (iconBorder != null)
+            {
+                try
+                {
+                    iconBorder.Background = Application.Current.Resources["CardBackgroundFillColorDefaultBrush"] as Brush;
+                    iconBorder.BorderBrush = Application.Current.Resources["CardStrokeColorDefaultBrush"] as Brush;
+                }
+                catch { }
+            }
+
+            if (iconHost != null)
+            {
+                iconHost.Children.Clear();
+
+                if (item.SvgSource != null)
+                {
+                    var image = new Image
+                    {
+                        Width = 48,
+                        Height = 48,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform,
+                        Source = item.SvgSource,
+                    };
+                    iconHost.Children.Add(image);
+                }
+                else if (!string.IsNullOrWhiteSpace(item.Glyph))
+                {
+                    Brush foreground = null;
+                    try
+                    {
+                        foreground = Application.Current.Resources["TextFillColorPrimaryBrush"] as Brush;
+                    }
+                    catch { }
+
+                    var fontIcon = new FontIcon
+                    {
+                        Glyph = item.Glyph,
+                        FontFamily = new FontFamily("Segoe Fluent Icons,Segoe MDL2 Assets"),
+                        FontSize = 28,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    };
+                    if (foreground != null)
+                    {
+                        fontIcon.Foreground = foreground;
+                    }
+
+                    iconHost.Children.Add(fontIcon);
+                }
+            }
+
+            if (nameText != null)
+            {
+                nameText.Text = item.DisplayName ?? string.Empty;
+            }
+
+            if (categoryText != null)
+            {
+                categoryText.Text = item.Category ?? string.Empty;
+            }
         }
 
         private sealed class IconPickerItem
@@ -438,6 +505,16 @@ namespace TopToolbar
                 CatalogId = catalogId;
                 ImagePath = imagePath;
                 Keywords = keywords ?? Array.Empty<string>();
+
+                // Pre-create SvgImageSource for binding
+                if (imageUri != null)
+                {
+                    SvgSource = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(imageUri)
+                    {
+                        RasterizePixelWidth = 48,
+                        RasterizePixelHeight = 48,
+                    };
+                }
             }
 
             public string Id { get; }
@@ -458,7 +535,9 @@ namespace TopToolbar
 
             public IReadOnlyList<string> Keywords { get; }
 
-            public Visibility SvgVisibility => ImageUri != null ? Visibility.Visible : Visibility.Collapsed;
+            public Microsoft.UI.Xaml.Media.Imaging.SvgImageSource SvgSource { get; }
+
+            public Visibility SvgVisibility => SvgSource != null ? Visibility.Visible : Visibility.Collapsed;
 
             public Visibility GlyphVisibility => !string.IsNullOrWhiteSpace(Glyph) ? Visibility.Visible : Visibility.Collapsed;
 

@@ -795,7 +795,7 @@ namespace TopToolbar
         {
             var button = new Button
             {
-                Content = new FontIcon { Glyph = content, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets"), FontSize = ToolbarIconFontSize },
+                Content = new FontIcon { Glyph = content, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets"), FontSize = ToolbarIconFontSize, Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 0, 0)) },
                 Width = ToolbarButtonSize,
                 Height = ToolbarButtonSize,
                 CornerRadius = new CornerRadius(8),
@@ -918,7 +918,7 @@ namespace TopToolbar
             var iconPresenter = new Controls.ToolbarIconPresenter
             {
                 IconSize = iconSize,
-                Foreground = Color.FromArgb(255, 255, 255, 255),
+                Foreground = Color.FromArgb(255, 0, 0, 0),
                 Button = model,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,

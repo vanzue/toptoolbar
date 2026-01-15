@@ -55,6 +55,9 @@ namespace TopToolbar
                 {
                     await _vm.LoadAsync(this.DispatcherQueue);
                 }
+
+                // Load startup state when window activates
+                await _vm.LoadStartupStateAsync();
             };
 
             // Keep left pane visible when no selection so UI doesn't look empty
@@ -163,12 +166,13 @@ namespace TopToolbar
             SafeCloseWindow();
         }
 
-        private async void OnAddButton(object sender, RoutedEventArgs e)
+        private void OnAddButton(object sender, RoutedEventArgs e)
         {
             if (_vm.SelectedGroup != null)
             {
                 _vm.AddButton(_vm.SelectedGroup);
-                await _vm.SaveAsync();
+                // Don't save immediately - new button has empty command
+                // Save will happen when user fills in command or closes settings
             }
         }
 
@@ -191,6 +195,32 @@ namespace TopToolbar
             {
                 _vm.RemoveGroup(_vm.SelectedGroup);
                 await _vm.SaveAsync();
+            }
+        }
+
+        private void OnGeneralItemTapped(object sender, TappedRoutedEventArgs e)
+        {
+            _vm.IsGeneralSelected = true;
+            // Deselect any group in the ListView
+            GroupsList.SelectedItem = null;
+        }
+
+        private async void OnStartupToggled(object sender, RoutedEventArgs e)
+        {
+            if (sender is ToggleSwitch toggle)
+            {
+                // Avoid reacting to programmatic changes
+                if (toggle.IsOn == _vm.IsStartupEnabled)
+                {
+                    return;
+                }
+
+                var success = await _vm.SetStartupEnabledAsync(toggle.IsOn);
+                if (!success)
+                {
+                    // Revert toggle if operation failed
+                    toggle.IsOn = _vm.IsStartupEnabled;
+                }
             }
         }
 
@@ -1054,6 +1084,7 @@ namespace TopToolbar
             var file = await picker.PickSingleFileAsync();
             if (file != null)
             {
+                _vm.SelectedButton.IsIconCustomized = true;
                 if (await _vm.TrySetImageIconFromFileAsync(_vm.SelectedButton, file.Path))
                 {
                     await _vm.SaveAsync();

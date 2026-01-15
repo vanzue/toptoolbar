@@ -193,6 +193,21 @@ public partial class ToolbarButton : INotifyPropertyChanged
         }
     }
 
+    private bool _isIconCustomized;
+
+    public bool IsIconCustomized
+    {
+        get => _isIconCustomized;
+        set
+        {
+            if (_isIconCustomized != value)
+            {
+                _isIconCustomized = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     [JsonIgnore]
     private bool _isExecuting;
 
@@ -279,6 +294,23 @@ public partial class ToolbarButton : INotifyPropertyChanged
     }
 
     [JsonIgnore]
+    private bool _isExpanded;
+
+    [JsonIgnore]
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (_isExpanded != value)
+            {
+                _isExpanded = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    [JsonIgnore]
     public bool IsImageIcon => IconType == ToolbarIconType.Image;
 
     [JsonIgnore]
@@ -310,6 +342,7 @@ public partial class ToolbarButton : INotifyPropertyChanged
             IconGlyph = IconGlyph,
             IconPath = IconPath,
             IsEnabled = IsEnabled,
+            IsIconCustomized = IsIconCustomized,
             Action = Action?.Clone() ?? new ToolbarAction(),
         };
 

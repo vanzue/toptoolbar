@@ -34,7 +34,16 @@ namespace TopToolbar.Helpers
 
         private static FrameworkElement CreateCatalogIcon(ToolbarButton model, double size, double dpiScale, Color? foregroundOverride)
         {
-            var entry = IconCatalogService.ResolveFromPath(model.IconPath) ?? IconCatalogService.GetDefault();
+            var entry = IconCatalogService.ResolveFromPath(model.IconPath);
+            
+            // If no catalog entry found and model has a valid glyph, use it directly
+            if (entry == null && !string.IsNullOrWhiteSpace(model.IconGlyph))
+            {
+                return CreateGlyph(model.IconGlyph, size, foregroundOverride);
+            }
+            
+            // Fall back to default catalog entry
+            entry ??= IconCatalogService.GetDefault();
             if (entry == null)
             {
                 return CreateGlyph(model.IconGlyph, size, foregroundOverride);
@@ -42,7 +51,7 @@ namespace TopToolbar.Helpers
 
             if (entry.HasGlyph)
             {
-                var color = foregroundOverride ?? Color.FromArgb(255, 255, 255, 255);
+                var color = foregroundOverride ?? Color.FromArgb(255, 0, 0, 0);
                 var fontFamily = string.IsNullOrWhiteSpace(entry.FontFamily)
                     ? new FontFamily("Segoe Fluent Icons,Segoe MDL2 Assets")
                     : new FontFamily(entry.FontFamily);
@@ -165,7 +174,7 @@ namespace TopToolbar.Helpers
         private static FrameworkElement CreateGlyph(string glyph, double size, Color? foregroundOverride)
         {
             var actualGlyph = string.IsNullOrWhiteSpace(glyph) ? DefaultGlyph : glyph.Trim();
-            var color = foregroundOverride ?? Color.FromArgb(255, 255, 255, 255);
+            var color = foregroundOverride ?? Color.FromArgb(255, 0, 0, 0);
             return new FontIcon
             {
                 Glyph = actualGlyph,

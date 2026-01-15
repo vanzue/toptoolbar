@@ -14,8 +14,7 @@ using System.Threading.Tasks;
 
 namespace TopToolbar.Services.Workspaces
 {
-    [SuppressMessage("Trimming", "IL2050:Correctness of COM interop cannot be guaranteed after trimming", Justification = "IPropertyStore COM interface preserved manually")]
-    internal static class NativeWindowHelper
+    internal static partial class NativeWindowHelper
     {
         private const int SwShowNormal = 1;
         private const int SwShowMinimized = 2;
@@ -641,12 +640,12 @@ namespace TopToolbar.Services.Workspaces
 
         private static string TryGetAppUserModelId(IntPtr hwnd)
         {
-            IPropertyStore propertyStore = null;
+            IntPtr propertyStorePtr = IntPtr.Zero;
             try
             {
-                var iid = typeof(IPropertyStore).GUID;
-                var hr = SHGetPropertyStoreForWindow(hwnd, ref iid, out propertyStore);
-                if (hr != 0 || propertyStore == null)
+                var iid = new Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99");
+                var hr = SHGetPropertyStoreForWindow(hwnd, ref iid, out propertyStorePtr);
+                if (hr != 0 || propertyStorePtr == IntPtr.Zero)
                 {
                     return string.Empty;
                 }
@@ -657,7 +656,13 @@ namespace TopToolbar.Services.Workspaces
                     PropertyId = 5,
                 };
 
-                propertyStore.GetValue(ref key, out var value);
+                var value = new PropVariant();
+                hr = PropertyStoreGetValue(propertyStorePtr, ref key, ref value);
+                if (hr != 0)
+                {
+                    return string.Empty;
+                }
+
                 try
                 {
                     return ExtractString(value);
@@ -673,12 +678,26 @@ namespace TopToolbar.Services.Workspaces
             }
             finally
             {
-                if (propertyStore != null)
+                if (propertyStorePtr != IntPtr.Zero)
                 {
-                    _ = Marshal.ReleaseComObject(propertyStore);
+                    _ = Marshal.Release(propertyStorePtr);
                 }
             }
         }
+
+        // IPropertyStore::GetValue is at vtable index 5 (after IUnknown's 3 methods + GetCount + GetAt)
+        private static int PropertyStoreGetValue(IntPtr propertyStore, ref PropertyKey key, ref PropVariant value)
+        {
+            // Get the vtable pointer
+            var vtable = Marshal.ReadIntPtr(propertyStore);
+            // GetValue is at index 5 in the vtable (0=QueryInterface, 1=AddRef, 2=Release, 3=GetCount, 4=GetAt, 5=GetValue)
+            var getValuePtr = Marshal.ReadIntPtr(vtable, 5 * IntPtr.Size);
+            var getValueDelegate = Marshal.GetDelegateForFunctionPointer<PropertyStoreGetValueDelegate>(getValuePtr);
+            return getValueDelegate(propertyStore, ref key, ref value);
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate int PropertyStoreGetValueDelegate(IntPtr thisPtr, ref PropertyKey key, ref PropVariant value);
 
         private static string ExtractString(PropVariant value)
         {
@@ -779,7 +798,7 @@ namespace TopToolbar.Services.Workspaces
         private static extern int SHGetPropertyStoreForWindow(
             IntPtr hwnd,
             ref Guid riid,
-            out IPropertyStore propertyStore
+            out IntPtr propertyStore
         );
 
         [DllImport("ole32.dll")]
@@ -822,22 +841,6 @@ namespace TopToolbar.Services.Workspaces
         private enum ProcessAccess : uint
         {
             QueryLimitedInformation = 0x1000,
-        }
-
-        [ComImport]
-        [Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
-        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        private interface IPropertyStore
-        {
-            int GetCount(out uint cProps);
-
-            int GetAt(uint iProp, out PropertyKey pkey);
-
-            int GetValue(ref PropertyKey key, out PropVariant pv);
-
-            int SetValue(ref PropertyKey key, ref PropVariant pv);
-
-            int Commit();
         }
 
         [StructLayout(LayoutKind.Sequential)]

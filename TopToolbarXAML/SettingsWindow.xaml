@@ -143,15 +143,14 @@
                                         <VisualState x:Name="Normal"/>
                                         <VisualState x:Name="PointerOver">
                                             <VisualState.Setters>
-                                                <!-- Light hover -->
                                                 <Setter Target="RootGrid.Background"
-                                                        Value="#FFF5F5F5"/>
+                                                        Value="{ThemeResource SubtleFillColorSecondaryBrush}"/>
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="Pressed">
                                             <VisualState.Setters>
                                                 <Setter Target="RootGrid.Background"
-                                                        Value="#FFEAEAEA"/>
+                                                        Value="{ThemeResource SubtleFillColorTertiaryBrush}"/>
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="Disabled">
@@ -166,31 +165,31 @@
                                         <VisualState x:Name="Selected">
                                             <VisualState.Setters>
                                                 <Setter Target="RootGrid.Background"
-                                                        Value="#FFFFFFFF"/>
+                                                        Value="{ThemeResource CardBackgroundFillColorSecondaryBrush}"/>
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="SelectedPointerOver">
                                             <VisualState.Setters>
                                                 <Setter Target="RootGrid.Background"
-                                                        Value="#FFF5F5F5"/>
+                                                        Value="{ThemeResource SubtleFillColorSecondaryBrush}"/>
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="SelectedPressed">
                                             <VisualState.Setters>
                                                 <Setter Target="RootGrid.Background"
-                                                        Value="#FFEDEDED"/>
+                                                        Value="{ThemeResource SubtleFillColorTertiaryBrush}"/>
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="SelectedUnfocused">
                                             <VisualState.Setters>
                                                 <Setter Target="RootGrid.Background"
-                                                        Value="#FFFFFFFF"/>
+                                                        Value="{ThemeResource CardBackgroundFillColorSecondaryBrush}"/>
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="SelectedDisabled">
                                             <VisualState.Setters>
                                                 <Setter Target="RootGrid.Background"
-                                                        Value="#FFF8F8F8"/>
+                                                        Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
                                                 <Setter Target="RootGrid.Opacity"
                                                         Value="0.5"/>
                                             </VisualState.Setters>
@@ -259,7 +258,30 @@
                         CornerRadius="14"
                         Margin="8,8,0,12">
                     <StackPanel Spacing="12">
-                        <Grid Margin="0,0,0,4">
+                        <!-- Fixed General item -->
+                        <ListViewItem x:Name="GeneralItem"
+                                      IsSelected="{x:Bind ViewModel.IsGeneralSelected, Mode=TwoWay}"
+                                      Tapped="OnGeneralItemTapped"
+                                      Style="{StaticResource ToolbarListItemStyle}"
+                                      Padding="4,6">
+                            <Grid ColumnSpacing="6" Padding="4,0,4,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <FontIcon FontFamily="Segoe MDL2 Assets"
+                                          Glyph="&#xE713;"
+                                          FontSize="14"
+                                          VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="General"
+                                           FontWeight="Normal"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </ListViewItem>
+
+                        <!-- Groups header with add/remove -->
+                        <Grid Margin="0,8,0,4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -287,7 +309,7 @@
                                         Padding="10,4"
                                         Content="Remove"
                                         Click="OnRemoveSelectedGroup"
-                                        IsEnabled="{x:Bind ViewModel.HasSelectedGroup, Mode=OneWay}"/>
+                                        IsEnabled="{x:Bind ViewModel.IsGroupSelected, Mode=OneWay}"/>
                             </StackPanel>
                         </Grid>
                         <ListView x:Name="GroupsList"
@@ -362,24 +384,41 @@
                         Padding="40,28,44,52"
                         Margin="4,16,16,20">
                     <StackPanel Spacing="26">
-                        <tkcontrols:SettingsCard Header="Workspace snapshot"
-                                                Description="Capture the current window layout as a workspace."
-                                                Visibility="{x:Bind ViewModel.HasSelectedGroup, Mode=OneWay}">
-                            <Button Content="Create snapshot"
-                                    HorizontalAlignment="Left"
-                                    Click="OnSnapshotWorkspace"/>
-                        </tkcontrols:SettingsCard>
+                        <!-- General settings (only when General is selected) -->
+                        <StackPanel Spacing="16" Visibility="{x:Bind ViewModel.IsGeneralSelected, Mode=OneWay}">
+                            <TextBlock Text="General"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"/>
 
-                        <tkcontrols:SettingsCard Visibility="{x:Bind ViewModel.HasSelectedGroup, Mode=OneWay}" x:Name="GroupNameEnableButton" 
-                                                        Header="{x:Bind ViewModel.SelectedGroup.Name, Mode=OneWay}"
-                                                        Description="{x:Bind ViewModel.SelectedGroup.Description, Mode=OneWay}">
-                            <ToggleSwitch IsOn="{x:Bind ViewModel.SelectedGroup.IsEnabled, Mode=TwoWay}" />
-                        </tkcontrols:SettingsCard>
+                            <tkcontrols:SettingsCard x:Name="StartupSettingsCard"
+                                                    Header="Run at startup"
+                                                    Description="{x:Bind ViewModel.StartupStatusText, Mode=OneWay}">
+                                <ToggleSwitch x:Name="StartupToggle"
+                                              IsOn="{x:Bind ViewModel.IsStartupEnabled, Mode=OneWay}"
+                                              IsEnabled="{x:Bind ViewModel.IsStartupAvailable, Mode=OneWay}"
+                                              Toggled="OnStartupToggled"/>
+                            </tkcontrols:SettingsCard>
 
-                        <!-- Buttons header with add/remove -->
-                        <Grid ColumnSpacing="10"
-                                Visibility="{x:Bind ViewModel.HasSelectedGroup, Mode=OneWay}"
-                                VerticalAlignment="Center">
+                            <tkcontrols:SettingsCard Header="Workspace snapshot"
+                                                    Description="Capture the current window layout as a workspace.">
+                                <Button Content="Create snapshot"
+                                        HorizontalAlignment="Left"
+                                        Click="OnSnapshotWorkspace"/>
+                            </tkcontrols:SettingsCard>
+                        </StackPanel>
+
+                        <!-- Group settings (only when a group is selected) -->
+                        <StackPanel Spacing="16" Visibility="{x:Bind ViewModel.IsGroupSelected, Mode=OneWay}">
+                            <tkcontrols:SettingsCard x:Name="GroupNameEnableButton" 
+                                                            Header="{x:Bind ViewModel.SelectedGroup.Name, Mode=OneWay}"
+                                                            Description="{x:Bind ViewModel.SelectedGroup.Description, Mode=OneWay}">
+                                <ToggleSwitch IsOn="{x:Bind ViewModel.SelectedGroup.IsEnabled, Mode=TwoWay}" />
+                            </tkcontrols:SettingsCard>
+
+                            <!-- Buttons header with add/remove -->
+                            <Grid ColumnSpacing="10"
+                                    VerticalAlignment="Center"
+                                    Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -406,45 +445,55 @@
                                         Tag="{x:Bind ViewModel.SelectedGroup}"
                                         VerticalAlignment="Center"/>
                             </StackPanel>
-                        </Grid>
+                            </Grid>
 
-                        <!-- Buttons as expandable settings -->
-                        <ItemsControl Visibility="{x:Bind ViewModel.HasSelectedGroup, Mode=OneWay}"
-                                ItemsSource="{x:Bind ViewModel.SelectedGroup.Buttons, Mode=OneWay}">
+                            <!-- Buttons as expandable settings -->
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.SelectedGroup.Buttons, Mode=OneWay}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="local:ToolbarButton">
-                                    <tkcontrols:SettingsExpander IsExpanded="False"
-                                                                 Header="{x:Bind DisplayName, Mode=OneWay}"
-                                                                 Description="{x:Bind Description, Mode=OneWay}">
+                                    <tkcontrols:SettingsExpander IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
+                                                                 Header="{x:Bind DisplayName, Mode=OneWay}">
+                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                            <ToggleSwitch IsOn="{x:Bind IsEnabled, Mode=TwoWay}" OnContent="" OffContent=""/>
+                                            <Button Click="OnRemoveButton"
+                                                    ToolTipService.ToolTip="Remove"
+                                                    Background="Transparent"
+                                                    BorderBrush="Transparent">
+                                                <FontIcon Glyph="&#xE74D;" FontSize="16" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                            </Button>
+                                        </StackPanel>
                                         <tkcontrols:SettingsExpander.Items>
-                                            <tkcontrols:SettingsCard Header="Enabled">
-                                                <ToggleSwitch IsOn="{x:Bind IsEnabled, Mode=TwoWay}"/>
-                                            </tkcontrols:SettingsCard>
                                             <tkcontrols:SettingsCard Header="Name">
                                                 <TextBox Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                         Style="{StaticResource StandardTextBoxStyle}"/>
                                             </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Description">
-                                                <TextBox Text="{x:Bind Description, Mode=TwoWay}"
+                                            <tkcontrols:SettingsCard Header="Command">
+                                                <TextBox Text="{x:Bind Action.Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                         Style="{StaticResource StandardTextBoxStyle}"/>
                                             </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Icon Type">
+                                            <tkcontrols:SettingsCard Header="Arguments">
+                                                <TextBox Text="{x:Bind Action.Arguments, Mode=TwoWay}"
+                                                        Style="{StaticResource StandardTextBoxStyle}"/>
+                                            </tkcontrols:SettingsCard>
+                                            <tkcontrols:SettingsCard Header="Customize Icon"
+                                                                     Description="Override the auto-detected icon">
+                                                <ToggleSwitch IsOn="{x:Bind IsIconCustomized, Mode=TwoWay}" OnContent="" OffContent=""/>
+                                            </tkcontrols:SettingsCard>
+                                            <tkcontrols:SettingsCard Header="Icon Type"
+                                                                     Visibility="{x:Bind IsIconCustomized, Mode=OneWay}">
                                                 <ComboBox SelectedIndex="{x:Bind IconTypeIndex, Mode=TwoWay}">
                                                     <ComboBoxItem Content="Icon"/>
                                                     <ComboBoxItem Content="Image"/>
                                                 </ComboBox>
                                             </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Icon">
-                                                <StackPanel Spacing="{StaticResource SpacingS}">
-                                                    <StackPanel Orientation="Horizontal"
-                                                                Spacing="{StaticResource SpacingS}">
-                                                        <Button Content="Choose from library"
-                                                                Click="OnChooseIconFromLibrary"
-                                                                Tag="{Binding}" />
-                                                    </StackPanel>
-                                                </StackPanel>
+                                            <tkcontrols:SettingsCard Header="Icon"
+                                                                     Visibility="{x:Bind IsIconCustomized, Mode=OneWay}">
+                                                <Button Content="Choose from library"
+                                                        Click="OnChooseIconFromLibrary"
+                                                        Tag="{Binding}" />
                                             </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Image Path">
+                                            <tkcontrols:SettingsCard Header="Image Path"
+                                                                     Visibility="{x:Bind IsIconCustomized, Mode=OneWay}">
                                                 <Grid ColumnSpacing="8">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
@@ -459,39 +508,11 @@
                                                             Tag="{Binding}"/>
                                                 </Grid>
                                             </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Command">
-                                                <TextBox Text="{x:Bind Action.Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                        Style="{StaticResource StandardTextBoxStyle}"/>
-                                            </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Arguments">
-                                                <TextBox Text="{x:Bind Action.Arguments, Mode=TwoWay}"
-                                                        Style="{StaticResource StandardTextBoxStyle}"/>
-                                            </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Working Directory">
-                                                <TextBox Text="{x:Bind Action.WorkingDirectory, Mode=TwoWay}"
-                                                        Style="{StaticResource StandardTextBoxStyle}"/>
-                                            </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Remove">
-                                                <Button Content="Remove"
-                                                        HorizontalAlignment="Left"
-                                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                        Click="OnRemoveButton"/>
-                                            </tkcontrols:SettingsCard>                                        </tkcontrols:SettingsExpander.Items>
+                                        </tkcontrols:SettingsExpander.Items>
                                     </tkcontrols:SettingsExpander>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
-                        <StackPanel Visibility="{x:Bind ViewModel.HasNoSelectedGroup, Mode=OneWay}"
-                                HorizontalAlignment="Center"
-                                Margin="0,60,0,0"
-                                Spacing="12">
-                            <FontIcon FontFamily="Segoe MDL2 Assets"
-                                    Glyph="&#xE713;"
-                                    FontSize="42"
-                                    Opacity="0.25"/>
-                            <TextBlock Text="Select a group to configure"
-                                    Opacity="0.6"/>
+                            </ItemsControl>
                         </StackPanel>
                     </StackPanel>
                 </Border>

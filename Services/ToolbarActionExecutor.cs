@@ -140,6 +140,49 @@ namespace TopToolbar.Services
 
                 // Expand environment variables
                 file = Environment.ExpandEnvironmentVariables(file);
+                args = Environment.ExpandEnvironmentVariables(args);
+
+                // Smart detection: if Command is a folder path, open with explorer
+                if (Directory.Exists(file))
+                {
+                    AppLogger.LogInfo($"Launch: detected folder path, opening with explorer: '{file}'");
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"\"{file}\"",
+                        UseShellExecute = true,
+                    });
+                    return;
+                }
+
+                // Smart detection: if Command is a URL, open with default browser
+                if (Uri.TryCreate(file, UriKind.Absolute, out var uri) &&
+                    (uri.Scheme == "http" || uri.Scheme == "https" || uri.Scheme == "mailto"))
+                {
+                    AppLogger.LogInfo($"Launch: detected URL, opening with default handler: '{file}'");
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = file,
+                        UseShellExecute = true,
+                    });
+                    return;
+                }
+
+                // Smart detection: if Command is a file (not .exe), open with default app
+                if (File.Exists(file))
+                {
+                    var fileExt = Path.GetExtension(file)?.ToLowerInvariant();
+                    if (fileExt != ".exe" && fileExt != ".bat" && fileExt != ".cmd" && fileExt != ".ps1" && fileExt != ".vbs" && fileExt != ".js")
+                    {
+                        AppLogger.LogInfo($"Launch: detected file, opening with default app: '{file}'");
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = file,
+                            UseShellExecute = true,
+                        });
+                        return;
+                    }
+                }
 
                 // If quoted path, extract path
                 if (file.StartsWith('"'))
@@ -217,10 +260,25 @@ namespace TopToolbar.Services
                 }
                 else
                 {
+                    // For explorer.exe, ensure path arguments are properly quoted
+                    var finalArgs = args;
+                    var fileNameLower = Path.GetFileName(file)?.ToLowerInvariant();
+                    if (fileNameLower == "explorer.exe" && !string.IsNullOrWhiteSpace(args))
+                    {
+                        var trimmedArgs = args.Trim();
+                        // If args looks like a path and isn't already quoted, quote it
+                        if (!trimmedArgs.StartsWith('"') && !trimmedArgs.StartsWith('/') && !trimmedArgs.StartsWith('-'))
+                        {
+                            // Expand environment variables in the path
+                            var expandedPath = Environment.ExpandEnvironmentVariables(trimmedArgs);
+                            finalArgs = $"\"{expandedPath}\"";
+                        }
+                    }
+
                     psi = new ProcessStartInfo
                     {
                         FileName = file,
-                        Arguments = args,
+                        Arguments = finalArgs,
                         WorkingDirectory = workingDir,
                         UseShellExecute = true,
                         Verb = action.RunAsAdmin ? "runas" : "open",

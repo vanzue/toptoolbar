@@ -19,6 +19,7 @@ using TopToolbar.Serialization;
 using TopToolbar.Services;
 using TopToolbar.Services.Providers;
 using TopToolbar.Services.Workspaces;
+using Windows.ApplicationModel;
 
 namespace TopToolbar.ViewModels
 {
@@ -44,6 +45,14 @@ namespace TopToolbar.ViewModels
                 SetProperty(ref _selectedGroup, value);
                 OnPropertyChanged(nameof(HasSelectedGroup));
                 OnPropertyChanged(nameof(HasNoSelectedGroup));
+                if (value != null)
+                {
+                    // Deselect General when a group is selected
+                    _isGeneralSelected = false;
+                    OnPropertyChanged(nameof(IsGeneralSelected));
+                }
+                // Must update IsGroupSelected after IsGeneralSelected is updated
+                OnPropertyChanged(nameof(IsGroupSelected));
             }
         }
 
@@ -72,6 +81,53 @@ namespace TopToolbar.ViewModels
         public bool HasNoSelectedGroup => SelectedGroup == null;
 
         public bool HasSelectedButton => SelectedButton != null;
+
+        private bool _isGeneralSelected = true;
+
+        public bool IsGeneralSelected
+        {
+            get => _isGeneralSelected;
+            set
+            {
+                if (_isGeneralSelected != value)
+                {
+                    _isGeneralSelected = value;
+                    OnPropertyChanged(nameof(IsGeneralSelected));
+                    OnPropertyChanged(nameof(IsGroupSelected));
+                    if (value)
+                    {
+                        // Deselect group when General is selected
+                        SelectedGroup = null;
+                    }
+                }
+            }
+        }
+
+        public bool IsGroupSelected => !IsGeneralSelected && SelectedGroup != null;
+
+        private bool _isStartupEnabled;
+
+        public bool IsStartupEnabled
+        {
+            get => _isStartupEnabled;
+            set => SetProperty(ref _isStartupEnabled, value);
+        }
+
+        private bool _isStartupAvailable = true;
+
+        public bool IsStartupAvailable
+        {
+            get => _isStartupAvailable;
+            set => SetProperty(ref _isStartupAvailable, value);
+        }
+
+        private string _startupStatusText = string.Empty;
+
+        public string StartupStatusText
+        {
+            get => _startupStatusText;
+            set => SetProperty(ref _startupStatusText, value);
+        }
 
         public SettingsViewModel(ToolbarConfigService service)
         {
@@ -163,7 +219,27 @@ namespace TopToolbar.ViewModels
                 }
             }
 
-            var cfg = new ToolbarConfig { Groups = Groups.ToList() };
+            // Create config with only valid buttons (non-empty command)
+            // Don't modify the UI Groups collection - just filter for saving
+            // Preserve group Id to avoid duplication on reload
+            var cfg = new ToolbarConfig
+            {
+                Groups = Groups.Select(g => new ButtonGroup
+                {
+                    Id = g.Id,
+                    Name = g.Name,
+                    Description = g.Description,
+                    IsEnabled = g.IsEnabled,
+                    Layout = g.Layout,
+                    Providers = g.Providers,
+                    StaticActions = g.StaticActions,
+                    Filter = g.Filter,
+                    AutoRefresh = g.AutoRefresh,
+                    Buttons = new System.Collections.ObjectModel.ObservableCollection<ToolbarButton>(
+                        g.Buttons.Where(b => !string.IsNullOrWhiteSpace(b.Action?.Command))),
+                }).ToList(),
+            };
+
             await _service.SaveAsync(cfg);
             await SaveWorkspaceConfigAsync();
             AppLogger.LogInfo("SaveCoreAsync: configs saved");
@@ -259,7 +335,7 @@ namespace TopToolbar.ViewModels
                         Name = string.IsNullOrWhiteSpace(definition.Name) ? definition.Id : definition.Name,
                         Description = definition.Id,
                         Enabled = true,
-                        Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F1" },
+                        Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F4" },
                     })
                     .ToList();
 
@@ -399,7 +475,7 @@ namespace TopToolbar.ViewModels
                 Description = id,
                 Enabled = true,
                 SortOrder = WorkspaceButtons.Count + 1,
-                Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F1" },
+                Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F4" },
             };
 
             var workspace = new WorkspaceButtonViewModel(buttonConfig, definition);
@@ -532,7 +608,7 @@ namespace TopToolbar.ViewModels
         {
             if (icon == null)
             {
-                return new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F1" };
+                return new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F4" };
             }
 
             return new ProviderIcon
@@ -641,9 +717,10 @@ namespace TopToolbar.ViewModels
                 {
                     UnhookButton(item);
                 }
+                // Only save when buttons are removed, not added
+                // New buttons with empty command should not trigger save
+                ScheduleSave();
             }
-
-            ScheduleSave();
         }
 
         private void Group_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -661,7 +738,12 @@ namespace TopToolbar.ViewModels
             b.PropertyChanged += Button_PropertyChanged;
             if (b.Action != null)
             {
+                AppLogger.LogInfo($"HookButton: hooking Action.PropertyChanged for button '{b.Name}'");
                 b.Action.PropertyChanged += (s, e) => OnActionPropertyChanged(b, e);
+            }
+            else
+            {
+                AppLogger.LogWarning($"HookButton: button '{b.Name}' has no Action");
             }
         }
 
@@ -682,8 +764,10 @@ namespace TopToolbar.ViewModels
 
         private void OnActionPropertyChanged(ToolbarButton button, PropertyChangedEventArgs e)
         {
+            AppLogger.LogInfo($"OnActionPropertyChanged: property={e.PropertyName}, button='{button?.Name}'");
             if (e.PropertyName == nameof(ToolbarAction.Command))
             {
+                AppLogger.LogInfo($"OnActionPropertyChanged: Command changed to '{button?.Action?.Command}'");
                 // Ensure property changes occur on UI thread
                 if (_dispatcher != null && !_dispatcher.HasThreadAccess)
                 {
@@ -711,6 +795,117 @@ namespace TopToolbar.ViewModels
 
             string path = cmd.Trim();
             path = Environment.ExpandEnvironmentVariables(path);
+
+            // Check if icon is user-managed (not auto-managed)
+            var configDirectory = Path.GetDirectoryName(_service.ConfigPath);
+            if (string.IsNullOrWhiteSpace(configDirectory))
+            {
+                return;
+            }
+
+            var iconsDir = Path.Combine(configDirectory, "icons");
+            Directory.CreateDirectory(iconsDir);
+
+            if (!ShouldAutoManageIcon(button, iconsDir))
+            {
+                AppLogger.LogDebug("Skipping auto icon because icon is user-managed.");
+                return;
+            }
+
+            AppLogger.LogInfo($"TryUpdateIconFromCommand: cmd='{cmd}'");
+
+            // Smart icon detection based on command type
+
+            // 1. URL detection - use link/globe icon
+            if (Uri.TryCreate(path, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == "http" || uri.Scheme == "https"))
+            {
+                SetSmartIcon(button, "glyph-E774", "\uE774"); // Globe icon
+                AppLogger.LogInfo("Smart icon: URL detected, using globe icon");
+                return;
+            }
+
+            // 2. mailto: detection - use mail icon
+            if (path.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+            {
+                SetSmartIcon(button, "glyph-E715", "\uE715"); // Mail icon
+                AppLogger.LogInfo("Smart icon: mailto detected, using mail icon");
+                return;
+            }
+
+            // 3. Folder detection - use folder icon
+            if (Directory.Exists(path))
+            {
+                SetSmartIcon(button, "glyph-E188", "\uE188"); // Folder icon
+                AppLogger.LogInfo("Smart icon: folder detected, using folder icon");
+                return;
+            }
+
+            // 4. File detection - use icon based on extension
+            if (File.Exists(path))
+            {
+                var ext = Path.GetExtension(path)?.ToLowerInvariant();
+                
+                // Document types
+                if (ext == ".txt" || ext == ".log" || ext == ".md" || ext == ".json" || ext == ".xml" || ext == ".csv")
+                {
+                    SetSmartIcon(button, "glyph-E8A5", "\uE8A5"); // Document icon
+                    AppLogger.LogInfo($"Smart icon: text file detected ({ext}), using document icon");
+                    return;
+                }
+
+                // Image types
+                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".bmp" || ext == ".ico" || ext == ".svg")
+                {
+                    SetSmartIcon(button, "glyph-EB9F", "\uEB9F"); // Photo icon
+                    AppLogger.LogInfo($"Smart icon: image file detected ({ext}), using photo icon");
+                    return;
+                }
+
+                // Video types
+                if (ext == ".mp4" || ext == ".avi" || ext == ".mkv" || ext == ".mov" || ext == ".wmv")
+                {
+                    SetSmartIcon(button, "glyph-E714", "\uE714"); // Video icon
+                    AppLogger.LogInfo($"Smart icon: video file detected ({ext}), using video icon");
+                    return;
+                }
+
+                // Audio types
+                if (ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".m4a" || ext == ".wma")
+                {
+                    SetSmartIcon(button, "glyph-E8D6", "\uE8D6"); // Music icon
+                    AppLogger.LogInfo($"Smart icon: audio file detected ({ext}), using music icon");
+                    return;
+                }
+
+                // Code/script types
+                if (ext == ".ps1" || ext == ".bat" || ext == ".cmd" || ext == ".sh")
+                {
+                    SetSmartIcon(button, "glyph-E756", "\uE756"); // Code/CommandPrompt icon
+                    AppLogger.LogInfo($"Smart icon: script file detected ({ext}), using terminal icon");
+                    return;
+                }
+
+                // Executable - try to extract icon
+                if (ext == ".exe")
+                {
+                    var target = Path.Combine(iconsDir, button.Id + ".png");
+                    if (IconExtractionService.TryExtractExeIconToPng(path, target))
+                    {
+                        button.IconType = ToolbarIconType.Image;
+                        button.IconPath = target;
+                        AppLogger.LogInfo($"Smart icon: extracted exe icon -> '{target}'");
+                        return;
+                    }
+                }
+
+                // Other files - use generic file icon
+                SetSmartIcon(button, "glyph-E7C3", "\uE7C3"); // Page icon
+                AppLogger.LogInfo($"Smart icon: file detected ({ext}), using file icon");
+                return;
+            }
+
+            // 5. Try to resolve as executable name (e.g., "notepad", "code")
             if (path.StartsWith('"'))
             {
                 int end = path.IndexOf('"', 1);
@@ -721,7 +916,6 @@ namespace TopToolbar.ViewModels
             }
             else
             {
-                // If not quoted, try to cut at the end of .exe to ignore arguments
                 int exeIdx = path.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
                 if (exeIdx >= 0)
                 {
@@ -729,60 +923,54 @@ namespace TopToolbar.ViewModels
                 }
             }
 
-            // Resolve relative/name-only commands (e.g., code, code.exe) via WorkingDirectory and PATH
-            var workingDirectory = string.Empty;
-            if (button != null && button.Action != null && !string.IsNullOrWhiteSpace(button.Action.WorkingDirectory))
-            {
-                workingDirectory = button.Action.WorkingDirectory;
-            }
-
+            var workingDirectory = button?.Action?.WorkingDirectory ?? string.Empty;
             var resolved = ResolveCommandToFilePath(path, workingDirectory);
-            if (!string.IsNullOrEmpty(resolved))
+            
+            if (!string.IsNullOrEmpty(resolved) && resolved.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(resolved))
             {
-                path = resolved;
-            }
-
-            var configDirectory = Path.GetDirectoryName(_service.ConfigPath);
-            if (string.IsNullOrWhiteSpace(configDirectory))
-            {
-                return;
-            }
-
-            var iconsDir = Path.Combine(configDirectory, "icons");
-            Directory.CreateDirectory(iconsDir);
-
-            AppLogger.LogInfo($"TryUpdateIconFromCommand: cmd='{cmd}', resolvedPath='{path}'");
-
-            if (!ShouldAutoManageIcon(button, iconsDir))
-            {
-                AppLogger.LogDebug("Skipping auto icon extraction because icon is user-managed.");
-                return;
-            }
-
-            var target = Path.Combine(iconsDir, button.Id + ".png");
-
-            if (path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(path))
-            {
-                if (IconExtractionService.TryExtractExeIconToPng(path, target))
+                var target = Path.Combine(iconsDir, button.Id + ".png");
+                if (IconExtractionService.TryExtractExeIconToPng(resolved, target))
                 {
                     button.IconType = ToolbarIconType.Image;
                     button.IconPath = target;
-                    AppLogger.LogInfo($"Extracted exe icon -> '{target}'");
+                    AppLogger.LogInfo($"Smart icon: extracted exe icon from resolved path -> '{target}'");
+                    return;
                 }
+            }
 
+            // Fallback: use default app icon
+            SetSmartIcon(button, "glyph-E7AC", "\uE7AC"); // App icon
+            AppLogger.LogInfo("Smart icon: using default app icon");
+        }
+
+        private void SetSmartIcon(ToolbarButton button, string catalogId, string glyph)
+        {
+            if (button == null)
+            {
                 return;
             }
 
-            // For scripts or other files, try associated icon
-            if (File.Exists(path))
+            var glyphHex = string.IsNullOrEmpty(glyph) ? "empty" : $"U+{(int)glyph[0]:X4}";
+            AppLogger.LogInfo($"SetSmartIcon: catalogId='{catalogId}', glyph={glyphHex}");
+
+            // Try catalog first
+            if (IconCatalogService.TryGetById(catalogId, out var entry))
             {
-                if (IconExtractionService.TryExtractFileIconToPng(path, target))
-                {
-                    button.IconType = ToolbarIconType.Image;
-                    button.IconPath = target;
-                    AppLogger.LogInfo($"Extracted file icon -> '{target}'");
-                }
+                AppLogger.LogInfo($"SetSmartIcon: found catalog entry '{catalogId}', entryGlyph=U+{(entry.Glyph != null && entry.Glyph.Length > 0 ? ((int)entry.Glyph[0]).ToString("X4") : "null")}");
+                button.IconType = ToolbarIconType.Catalog;
+                button.IconPath = IconCatalogService.BuildCatalogPath(entry.Id);
+                button.IconGlyph = entry.Glyph ?? glyph;
             }
+            else
+            {
+                // Fallback to glyph directly
+                AppLogger.LogInfo($"SetSmartIcon: catalog '{catalogId}' not found, using glyph fallback {glyphHex}");
+                button.IconType = ToolbarIconType.Catalog;
+                button.IconGlyph = glyph;
+                button.IconPath = string.Empty;
+            }
+            var finalGlyphHex = string.IsNullOrEmpty(button.IconGlyph) ? "empty" : $"U+{(int)button.IconGlyph[0]:X4}";
+            AppLogger.LogInfo($"SetSmartIcon: button '{button.Name}' final state: type={button.IconType}, glyph={finalGlyphHex}, path='{button.IconPath}'");
         }
 
         private static bool ShouldAutoManageIcon(ToolbarButton button, string iconsDir)
@@ -792,22 +980,13 @@ namespace TopToolbar.ViewModels
                 return false;
             }
 
-            if (button.IconType == ToolbarIconType.Image)
+            // If user has customized the icon, don't auto-manage
+            if (button.IsIconCustomized)
             {
-                if (string.IsNullOrWhiteSpace(button.IconPath))
-                {
-                    return true;
-                }
-
-                return IsManagedImageIcon(button, iconsDir);
+                return false;
             }
 
-            if (button.IconType == ToolbarIconType.Catalog)
-            {
-                return IsDefaultCatalogIcon(button);
-            }
-
-            return false;
+            return true;
         }
 
         private static bool IsManagedImageIcon(ToolbarButton button, string iconsDir)
@@ -981,6 +1160,98 @@ namespace TopToolbar.ViewModels
             ScheduleSave();
         }
 
+        public async Task LoadStartupStateAsync()
+        {
+            try
+            {
+                var startupTask = await StartupTask.GetAsync("TopToolbarStartup");
+                switch (startupTask.State)
+                {
+                    case StartupTaskState.Enabled:
+                        IsStartupEnabled = true;
+                        IsStartupAvailable = true;
+                        StartupStatusText = string.Empty;
+                        break;
+                    case StartupTaskState.Disabled:
+                        IsStartupEnabled = false;
+                        IsStartupAvailable = true;
+                        StartupStatusText = string.Empty;
+                        break;
+                    case StartupTaskState.DisabledByUser:
+                        IsStartupEnabled = false;
+                        IsStartupAvailable = false;
+                        StartupStatusText = "Disabled in Task Manager. Enable it there first.";
+                        break;
+                    case StartupTaskState.DisabledByPolicy:
+                        IsStartupEnabled = false;
+                        IsStartupAvailable = false;
+                        StartupStatusText = "Disabled by group policy.";
+                        break;
+                    case StartupTaskState.EnabledByPolicy:
+                        IsStartupEnabled = true;
+                        IsStartupAvailable = false;
+                        StartupStatusText = "Enabled by group policy.";
+                        break;
+                    default:
+                        IsStartupEnabled = false;
+                        IsStartupAvailable = false;
+                        StartupStatusText = "Status unknown.";
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.LogWarning($"Failed to get startup task state: {ex.Message}");
+                IsStartupEnabled = false;
+                IsStartupAvailable = false;
+                StartupStatusText = "Startup task not available (non-packaged app?).";
+            }
+        }
+
+        public async Task<bool> SetStartupEnabledAsync(bool enabled)
+        {
+            try
+            {
+                var startupTask = await StartupTask.GetAsync("TopToolbarStartup");
+
+                if (enabled)
+                {
+                    var newState = await startupTask.RequestEnableAsync();
+                    IsStartupEnabled = newState == StartupTaskState.Enabled;
+
+                    if (newState == StartupTaskState.DisabledByUser)
+                    {
+                        StartupStatusText = "Disabled in Task Manager. Enable it there first.";
+                        IsStartupAvailable = false;
+                    }
+                    else if (newState == StartupTaskState.DisabledByPolicy)
+                    {
+                        StartupStatusText = "Disabled by group policy.";
+                        IsStartupAvailable = false;
+                    }
+                    else
+                    {
+                        StartupStatusText = string.Empty;
+                    }
+
+                    return IsStartupEnabled;
+                }
+                else
+                {
+                    startupTask.Disable();
+                    IsStartupEnabled = false;
+                    StartupStatusText = string.Empty;
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.LogWarning($"Failed to set startup state: {ex.Message}");
+                StartupStatusText = $"Failed: {ex.Message}";
+                return false;
+            }
+        }
+
         public void RemoveGroup(ButtonGroup group)
         {
             Groups.Remove(group);
@@ -998,7 +1269,8 @@ namespace TopToolbar.ViewModels
             var button = new ToolbarButton
             {
                 Name = "New Button",
-                Action = new ToolbarAction { Command = "notepad.exe" },
+                Action = new ToolbarAction { Command = string.Empty },
+                IsExpanded = true,
             };
 
             ResetIconToDefault(button);
@@ -1007,7 +1279,7 @@ namespace TopToolbar.ViewModels
 
             SelectedGroup = group;
             SelectedButton = group.Buttons.LastOrDefault();
-            ScheduleSave();
+            // Don't schedule save - wait until user fills in command
         }
 
         public bool TrySetCatalogIcon(ToolbarButton button, string catalogId)
