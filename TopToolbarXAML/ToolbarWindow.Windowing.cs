@@ -4,20 +4,12 @@
 
 using System;
 using System.Runtime.InteropServices;
-using Microsoft.UI.Xaml;
 using WinUIEx;
 
 namespace TopToolbar
 {
     public sealed partial class ToolbarWindow
     {
-        // Helper: convert raw pixel to DIP relative to window DPI (if needed later for precise placement)
-        private double PxToDip(int px)
-        {
-            var dpi = GetDpiForWindow(_hwnd != IntPtr.Zero ? _hwnd : this.GetWindowHandle());
-            return (double)px * 96.0 / dpi;
-        }
-
         private void EnsurePerMonitorV2()
         {
             try
@@ -55,8 +47,11 @@ namespace TopToolbar
                 // lParam points to a RECT in new DPI suggested size/pos
                 try
                 {
-                    BuildToolbarFromStore();
                     ResizeToContent();
+                    if (!_isVisible)
+                    {
+                        PositionAtTopCenter();
+                    }
                 }
                 catch
                 {
@@ -64,12 +59,6 @@ namespace TopToolbar
             }
 
             return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
-        }
-
-        private void Window_Activated(object sender, WindowActivatedEventArgs args)
-        {
-            // keep always on top
-            MakeTopMost();
         }
 
         // P/Invoke to keep window topmost if WinUIEx helper not available
@@ -138,9 +127,6 @@ namespace TopToolbar
         [DllImport("user32.dll")]
         private static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
 
-        [DllImport("dwmapi.dll", PreserveSig = true)]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
@@ -150,10 +136,6 @@ namespace TopToolbar
         [DllImport("user32.dll", SetLastError = true)]
         private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
 
-        [DllImport("user32.dll")]
-        private static extern uint GetDpiForWindow(IntPtr hWnd);
     }
 }

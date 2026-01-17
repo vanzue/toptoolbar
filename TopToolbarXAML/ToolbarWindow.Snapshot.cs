@@ -7,7 +7,7 @@ using System.Diagnostics;
 using System.Threading;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using TopToolbar.Services.Workspaces;
+using TopToolbar.Providers;
 using WinUIEx;
 
 namespace TopToolbar
@@ -34,9 +34,17 @@ namespace TopToolbar
 
                 try
                 {
-                    using var runtime = new WorkspacesRuntimeService();
+                    if (!_providerRuntime.TryGetProvider("WorkspaceProvider", out var provider)
+                        || provider is not WorkspaceProvider workspaceProvider)
+                    {
+                        await ShowSimpleMessageOnUiThreadAsync(
+                            "Snapshot failed",
+                            "Workspace provider is not available."
+                        );
+                        return;
+                    }
 
-                    var workspace = await runtime.SnapshotAsync(workspaceName, CancellationToken.None).ConfigureAwait(false);
+                    var workspace = await workspaceProvider.SnapshotAsync(workspaceName, CancellationToken.None).ConfigureAwait(false);
                     if (workspace == null)
                     {
                         await ShowSimpleMessageOnUiThreadAsync("Snapshot failed", "No eligible windows were detected to capture.");

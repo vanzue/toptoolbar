@@ -109,7 +109,7 @@ namespace TopToolbar.Providers
         {
             if (!_groupProviders.TryGetValue(providerId, out var provider))
             {
-                throw new InvalidOperationException("Provider '{providerId}' does not support toolbar groups.");
+                throw new InvalidOperationException($"Provider '{providerId}' does not support toolbar groups.");
             }
 
             var ctx = context ?? new ActionContext();

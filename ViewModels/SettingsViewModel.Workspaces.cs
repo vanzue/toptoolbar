@@ -20,7 +20,8 @@ namespace TopToolbar.ViewModels
 {
     public partial class SettingsViewModel
     {
-        private readonly WorkspaceProviderConfigStore _workspaceStore = new();
+        private readonly WorkspaceProviderConfigStore _workspaceConfigStore = new();
+        private readonly WorkspaceDefinitionStore _workspaceDefinitionStore;
         private bool _suppressWorkspaceSave;
 
         public ObservableCollection<WorkspaceButtonViewModel> WorkspaceButtons { get; } = new();
@@ -59,7 +60,9 @@ namespace TopToolbar.ViewModels
             ScheduleSave();
         }
 
-        private void LoadWorkspaceButtons(WorkspaceProviderConfig config)
+        private void LoadWorkspaceButtons(
+            WorkspaceProviderConfig config,
+            System.Collections.Generic.IReadOnlyList<WorkspaceDefinition> definitions)
         {
             foreach (var existing in WorkspaceButtons.ToList())
             {
@@ -74,11 +77,9 @@ namespace TopToolbar.ViewModels
                 return;
             }
 
-            config.Data ??= new WorkspaceProviderData();
-            config.Data.Workspaces ??= new System.Collections.Generic.List<WorkspaceDefinition>();
             config.Buttons ??= new System.Collections.Generic.List<WorkspaceButtonConfig>();
 
-            var definitionLookup = config.Data.Workspaces
+            var definitionLookup = (definitions ?? System.Array.Empty<WorkspaceDefinition>())
                 .Where(ws => ws != null && !string.IsNullOrWhiteSpace(ws.Id))
                 .ToDictionary(ws => ws.Id.Trim(), ws => ws, StringComparer.OrdinalIgnoreCase);
 
@@ -148,8 +149,9 @@ namespace TopToolbar.ViewModels
                 Version = "1.0.0",
                 Enabled = true,
                 Buttons = new System.Collections.Generic.List<WorkspaceButtonConfig>(),
-                Data = new WorkspaceProviderData { Workspaces = new System.Collections.Generic.List<WorkspaceDefinition>() },
             };
+
+            var definitions = new System.Collections.Generic.List<WorkspaceDefinition>();
 
             foreach (var workspace in WorkspaceButtons)
             {
@@ -177,10 +179,11 @@ namespace TopToolbar.ViewModels
                     ? workspace.Definition.Monitors.Select(DeepClone).Where(m => m != null).ToList()
                     : new System.Collections.Generic.List<MonitorDefinition>();
 
-                config.Data.Workspaces.Add(definitionClone);
+                definitions.Add(definitionClone);
             }
 
-            await _workspaceStore.SaveAsync(config);
+            await _workspaceDefinitionStore.SaveAllAsync(definitions, System.Threading.CancellationToken.None);
+            await _workspaceConfigStore.SaveAsync(config);
         }
 
         private void HookWorkspaceButton(WorkspaceButtonViewModel workspace)

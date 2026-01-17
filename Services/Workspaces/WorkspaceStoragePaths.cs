@@ -13,10 +13,36 @@ namespace TopToolbar.Services.Workspaces
     internal static class WorkspaceStoragePaths
     {
         private const string WorkspaceProviderFileName = "WorkspaceProvider.json";
+        private const string WorkspaceDefinitionsFileName = "workspaces.json";
+
+        internal static string GetProviderConfigPath()
+        {
+            return Path.Combine(AppPaths.ProvidersDirectory, WorkspaceProviderFileName);
+        }
 
         internal static string GetDefaultWorkspacesPath()
         {
-            return Path.Combine(AppPaths.ProvidersDirectory, WorkspaceProviderFileName);
+            return GetProviderConfigPath();
+        }
+
+        internal static string GetWorkspaceDefinitionsPath(string providerConfigPath = null)
+        {
+            if (!string.IsNullOrWhiteSpace(providerConfigPath))
+            {
+                var defaultConfigPath = GetProviderConfigPath();
+                if (string.Equals(providerConfigPath, defaultConfigPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Path.Combine(AppPaths.ConfigDirectory, WorkspaceDefinitionsFileName);
+                }
+
+                var directory = Path.GetDirectoryName(providerConfigPath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    return Path.Combine(directory, WorkspaceDefinitionsFileName);
+                }
+            }
+
+            return Path.Combine(AppPaths.ConfigDirectory, WorkspaceDefinitionsFileName);
         }
 
         internal static string GetLegacyPowerToysPath()

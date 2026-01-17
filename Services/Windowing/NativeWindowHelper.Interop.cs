@@ -6,7 +6,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace TopToolbar.Services.Workspaces
+namespace TopToolbar.Services.Windowing
 {
     internal static partial class NativeWindowHelper
     {

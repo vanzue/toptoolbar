@@ -3,13 +3,10 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using TopToolbar.Actions;
-using TopToolbar.Models;
-using TopToolbar.Providers;
 using Timer = System.Timers.Timer;
 using Path = System.IO.Path;
 
@@ -17,62 +14,6 @@ namespace TopToolbar
 {
     public sealed partial class ToolbarWindow
     {
-        // Track which groups we've already hooked to avoid duplicate handlers
-        private readonly HashSet<string> _enabledChangeHooked = new(StringComparer.OrdinalIgnoreCase);
-
-        private void HookAllGroupsForEnabledChanges()
-        {
-            foreach (var g in _store.Groups)
-            {
-                if (g != null)
-                {
-                    HookGroupForEnabledChanges(g.Id);
-                }
-            }
-        }
-
-        private void HookGroupForEnabledChanges(string groupId)
-        {
-            if (string.IsNullOrWhiteSpace(groupId))
-            {
-                return;
-            }
-
-            var group = _store.GetGroup(groupId);
-            if (group == null)
-            {
-                return;
-            }
-
-            if (_enabledChangeHooked.Contains(group.Id))
-            {
-                return; // already hooked
-            }
-
-            group.PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(ButtonGroup.IsEnabled))
-                {
-                    try
-                    {
-                        if (!DispatcherQueue.TryEnqueue(() =>
-                        {
-                            BuildToolbarFromStore();
-                            ResizeToContent();
-                        }))
-                        {
-                            BuildToolbarFromStore();
-                            ResizeToContent();
-                        }
-                    }
-                    catch
-                    {
-                    }
-                }
-            };
-            _enabledChangeHooked.Add(group.Id);
-        }
-
         private void RegisterProviders()
         {
             try
@@ -112,12 +53,20 @@ namespace TopToolbar
                 {
                     await _vm.LoadAsync(this.DispatcherQueue);
                     await RefreshWorkspaceGroupAsync();
-                    DispatcherQueue.TryEnqueue(() =>
+
+                    if (DispatcherQueue == null || DispatcherQueue.HasThreadAccess)
                     {
                         SyncStaticGroupsIntoStore();
-                        BuildToolbarFromStore();
                         ResizeToContent();
-                    });
+                    }
+                    else
+                    {
+                        _ = DispatcherQueue.TryEnqueue(() =>
+                        {
+                            SyncStaticGroupsIntoStore();
+                            ResizeToContent();
+                        });
+                    }
                 };
 
                 _configWatcher = new FileSystemWatcher(dir, file)
@@ -208,19 +157,12 @@ namespace TopToolbar
                 }
                 else if (!DispatcherQueue.TryEnqueue(Apply))
                 {
-                    Apply();
+                    // Ignore if we can't marshal to the UI thread.
                 }
             }
             catch
             {
             }
-        }
-
-        // Incremental diff update for workspace group to avoid full rebuild.
-        // Obsolete: old incremental workspace diff path (replaced by store). Retained temporarily for reference.
-        private void ReplaceOrInsertWorkspaceGroup(ButtonGroup newGroup, ProviderChangedEventArgs changeArgs = null)
-        {
-            // Intentionally left empty (legacy path). Will be removed after confirming store path stability.
         }
     }
 }

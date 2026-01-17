@@ -4,7 +4,7 @@
 
 using System;
 
-namespace TopToolbar.Services.Workspaces
+namespace TopToolbar.Services.Windowing
 {
     internal sealed class WindowInfo
     {
@@ -19,7 +19,9 @@ namespace TopToolbar.Services.Workspaces
             string appUserModelId,
             bool isVisible,
             WindowBounds bounds,
-            string className)
+            string className,
+            string monitorId,
+            int monitorIndex)
         {
             Handle = handle;
             ProcessId = processId;
@@ -32,6 +34,8 @@ namespace TopToolbar.Services.Workspaces
             IsVisible = isVisible;
             Bounds = bounds;
             ClassName = className ?? string.Empty;
+            MonitorId = monitorId ?? string.Empty;
+            MonitorIndex = monitorIndex;
         }
 
         public IntPtr Handle { get; }
@@ -55,5 +59,33 @@ namespace TopToolbar.Services.Workspaces
         public WindowBounds Bounds { get; }
 
         public string ClassName { get; }
+
+        public string MonitorId { get; }
+
+        public int MonitorIndex { get; }
+
+        public WindowInfo WithMonitor(string monitorId, int monitorIndex)
+        {
+            if (string.Equals(MonitorId, monitorId ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+                && MonitorIndex == monitorIndex)
+            {
+                return this;
+            }
+
+            return new WindowInfo(
+                Handle,
+                ProcessId,
+                ProcessPath,
+                ProcessFileName,
+                ProcessName,
+                PackageFullName,
+                Title,
+                AppUserModelId,
+                IsVisible,
+                Bounds,
+                ClassName,
+                monitorId ?? string.Empty,
+                monitorIndex);
+        }
     }
 }

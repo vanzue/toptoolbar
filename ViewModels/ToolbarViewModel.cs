@@ -274,8 +274,7 @@ namespace TopToolbar.ViewModels
                 tcs.TrySetResult(true);
             }))
             {
-                AppLogger.LogWarning("ToolbarViewModel.ApplyGroupsAsync: failed to marshal to dispatcher, applying on caller thread.");
-                Apply();
+                AppLogger.LogWarning("ToolbarViewModel.ApplyGroupsAsync: failed to marshal to dispatcher.");
                 return;
             }
 

@@ -24,6 +24,8 @@ namespace TopToolbar.Providers
     {
         private const string WorkspacePrefix = "workspace.launch:";
         private readonly WorkspaceProviderConfigStore _configStore;
+        private readonly WorkspaceDefinitionStore _definitionStore;
+        private readonly WorkspaceButtonStore _buttonStore;
         private readonly WorkspacesRuntimeService _workspacesService;
 
         // Caching + watcher fields
@@ -31,7 +33,8 @@ namespace TopToolbar.Providers
         private List<WorkspaceRecord> _cached = new();
         private bool _cacheLoaded;
         private int _version;
-        private FileSystemWatcher _watcher;
+        private FileSystemWatcher _configWatcher;
+        private FileSystemWatcher _definitionsWatcher;
         private System.Timers.Timer _debounceTimer;
         private bool _disposed;
 
@@ -44,6 +47,8 @@ namespace TopToolbar.Providers
         public WorkspaceProvider(string workspacesPath = null)
         {
             _configStore = new WorkspaceProviderConfigStore(workspacesPath);
+            _definitionStore = new WorkspaceDefinitionStore(null, _configStore);
+            _buttonStore = new WorkspaceButtonStore(_configStore, _definitionStore);
             _workspacesService = new WorkspacesRuntimeService(_configStore.FilePath);
             StartWatcher();
         }
@@ -52,14 +57,6 @@ namespace TopToolbar.Providers
         {
             try
             {
-                var configPath = _configStore.FilePath;
-                var dir = Path.GetDirectoryName(configPath);
-                var file = Path.GetFileName(configPath);
-                if (string.IsNullOrWhiteSpace(dir) || string.IsNullOrWhiteSpace(file))
-                {
-                    return;
-                }
-
                 _debounceTimer = new System.Timers.Timer(250) { AutoReset = false };
                 _debounceTimer.Elapsed += async (_, __) =>
                 {
@@ -76,23 +73,65 @@ namespace TopToolbar.Providers
                     }
                 };
 
-                _watcher = new FileSystemWatcher(dir, file)
-                {
-                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName | NotifyFilters.CreationTime,
-                    IncludeSubdirectories = false,
-                    EnableRaisingEvents = true,
-                };
+                var handler = new FileSystemEventHandler((_, __) => RestartDebounce());
+                var renamedHandler = new RenamedEventHandler((_, __) => RestartDebounce());
 
-                FileSystemEventHandler handler = (_, __) => RestartDebounce();
-                RenamedEventHandler renamedHandler = (_, __) => RestartDebounce();
-                _watcher.Changed += handler;
-                _watcher.Created += handler;
-                _watcher.Deleted += handler;
-                _watcher.Renamed += renamedHandler;
+                _configWatcher = CreateWatcher(_configStore.FilePath, handler, renamedHandler);
+                _definitionsWatcher = CreateWatcher(_definitionStore.FilePath, handler, renamedHandler);
             }
             catch (Exception)
             {
                 // Ignore watcher setup failures
+            }
+        }
+
+        private static FileSystemWatcher CreateWatcher(
+            string filePath,
+            FileSystemEventHandler handler,
+            RenamedEventHandler renamedHandler)
+        {
+            var dir = Path.GetDirectoryName(filePath);
+            var file = Path.GetFileName(filePath);
+            if (string.IsNullOrWhiteSpace(dir) || string.IsNullOrWhiteSpace(file))
+            {
+                return null;
+            }
+
+            var watcher = new FileSystemWatcher(dir, file)
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName | NotifyFilters.CreationTime,
+                IncludeSubdirectories = false,
+                EnableRaisingEvents = true,
+            };
+
+            watcher.Changed += handler;
+            watcher.Created += handler;
+            watcher.Deleted += handler;
+            watcher.Renamed += renamedHandler;
+            return watcher;
+        }
+
+        private static void DisposeWatcher(FileSystemWatcher watcher)
+        {
+            if (watcher == null)
+            {
+                return;
+            }
+
+            try
+            {
+                watcher.EnableRaisingEvents = false;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                watcher.Dispose();
+            }
+            catch
+            {
             }
         }
 
@@ -234,6 +273,14 @@ namespace TopToolbar.Providers
             {
                 try
                 {
+                    await _buttonStore.EnsureButtonAsync(workspace, cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                }
+
+                try
+                {
                     await ReloadIfChangedAsync().ConfigureAwait(false);
                 }
                 catch
@@ -304,8 +351,10 @@ namespace TopToolbar.Providers
             };
 
             var config = await _configStore.LoadAsync(cancellationToken).ConfigureAwait(false);
-            var workspaceLookup = config.Data?.Workspaces?.ToDictionary(ws => ws.Id, StringComparer.OrdinalIgnoreCase)
-                                   ?? new Dictionary<string, WorkspaceDefinition>(StringComparer.OrdinalIgnoreCase);
+            var definitions = await _definitionStore.LoadAllAsync(cancellationToken).ConfigureAwait(false);
+            var workspaceLookup = definitions
+                .Where(ws => ws != null && !string.IsNullOrWhiteSpace(ws.Id))
+                .ToDictionary(ws => ws.Id, StringComparer.OrdinalIgnoreCase);
 
             var orderedButtons = (config.Buttons != null && config.Buttons.Count > 0)
                 ? config.Buttons
@@ -535,14 +584,15 @@ namespace TopToolbar.Providers
 
         private async Task<IReadOnlyList<WorkspaceRecord>> ReadWorkspacesFileAsync(CancellationToken cancellationToken)
         {
-            var config = await _configStore.LoadAsync(cancellationToken).ConfigureAwait(false);
-            if (config.Data?.Workspaces == null || config.Data.Workspaces.Count == 0)
+            var definitions = await _definitionStore.LoadAllAsync(cancellationToken).ConfigureAwait(false);
+            if (definitions.Count == 0)
             {
                 return Array.Empty<WorkspaceRecord>();
             }
 
-            var records = new List<WorkspaceRecord>(config.Data.Workspaces.Count);
-            foreach (var workspace in config.Data.Workspaces)
+            var config = await _configStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+            var records = new List<WorkspaceRecord>(definitions.Count);
+            foreach (var workspace in definitions)
             {
                 if (workspace == null)
                 {
@@ -599,19 +649,11 @@ namespace TopToolbar.Providers
 
                 _debounceTimer = null;
 
-                try
-                {
-                    if (_watcher != null)
-                    {
-                        _watcher.EnableRaisingEvents = false;
-                        _watcher.Dispose();
-                    }
-                }
-                catch
-                {
-                }
+                DisposeWatcher(_configWatcher);
+                _configWatcher = null;
 
-                _watcher = null;
+                DisposeWatcher(_definitionsWatcher);
+                _definitionsWatcher = null;
 
                 try
                 {

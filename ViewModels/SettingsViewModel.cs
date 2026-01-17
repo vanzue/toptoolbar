@@ -4,12 +4,14 @@
 
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Timers;
 using Microsoft.UI.Dispatching;
 using TopToolbar.Logging;
 using TopToolbar.Models;
 using TopToolbar.Services;
+using TopToolbar.Services.Workspaces;
+using Timer = System.Timers.Timer;
 
 namespace TopToolbar.ViewModels
 {
@@ -22,6 +24,7 @@ namespace TopToolbar.ViewModels
         public SettingsViewModel(ToolbarConfigService service)
         {
             _service = service;
+            _workspaceDefinitionStore = new WorkspaceDefinitionStore(null, _workspaceConfigStore);
             _saveDebounce.Elapsed += async (s, e) =>
             {
                 await SaveAsync();
@@ -35,7 +38,8 @@ namespace TopToolbar.ViewModels
         {
             _dispatcher = dispatcher;
             var toolbarConfig = await _service.LoadAsync();
-            var workspaceConfig = await _workspaceStore.LoadAsync();
+            var workspaceConfig = await _workspaceConfigStore.LoadAsync();
+            var workspaceDefinitions = await _workspaceDefinitionStore.LoadAllAsync(CancellationToken.None);
 
             void Apply()
             {
@@ -55,7 +59,7 @@ namespace TopToolbar.ViewModels
                 _suppressWorkspaceSave = true;
                 try
                 {
-                    LoadWorkspaceButtons(workspaceConfig);
+                    LoadWorkspaceButtons(workspaceConfig, workspaceDefinitions);
                 }
                 finally
                 {

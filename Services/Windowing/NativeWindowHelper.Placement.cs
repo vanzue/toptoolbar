@@ -8,21 +8,21 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
-namespace TopToolbar.Services.Workspaces
+namespace TopToolbar.Services.Windowing
 {
     internal static partial class NativeWindowHelper
     {
         public static void SetWindowPlacement(
             IntPtr hwnd,
-            ApplicationDefinition.ApplicationPosition position,
+            WindowPlacement position,
             bool maximize,
             bool minimize,
             bool waitForInputIdle = false
         )
         {
-            if (hwnd == IntPtr.Zero || position == null || position.IsEmpty)
+            if (hwnd == IntPtr.Zero || position.IsEmpty)
             {
-                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: skipped - hwnd={hwnd}, position={position?.X},{position?.Y},{position?.Width},{position?.Height}, isEmpty={position?.IsEmpty}");
+                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: skipped - hwnd={hwnd}, position={position.X},{position.Y},{position.Width},{position.Height}, isEmpty={position.IsEmpty}");
                 return;
             }
 
@@ -94,10 +94,10 @@ namespace TopToolbar.Services.Workspaces
 
         private static void VerifyWindowPlacementWithRetry(
             IntPtr hwnd,
-            ApplicationDefinition.ApplicationPosition position
+            WindowPlacement position
         )
         {
-            if (hwnd == IntPtr.Zero || position == null || position.IsEmpty)
+            if (hwnd == IntPtr.Zero || position.IsEmpty)
             {
                 return;
             }
@@ -130,7 +130,7 @@ namespace TopToolbar.Services.Workspaces
 
         private static bool IsWindowAtExpectedPlacement(
             IntPtr hwnd,
-            ApplicationDefinition.ApplicationPosition position
+            WindowPlacement position
         )
         {
             var bounds = GetWindowBounds(hwnd);

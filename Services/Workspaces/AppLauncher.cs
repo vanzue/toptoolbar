@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Windows.Management.Deployment;
 using TopToolbar.Logging;
+using TopToolbar.Services.Windowing;
 
 namespace TopToolbar.Services.Workspaces
 {
@@ -29,9 +30,10 @@ namespace TopToolbar.Services.Workspaces
         /// </summary>
         public static async Task<AppWindowResult> LaunchAppAsync(
             ApplicationDefinition app,
-            WindowTracker windowTracker,
+            WindowManager windowManager,
             TimeSpan windowWaitTimeout,
             TimeSpan windowPollInterval,
+            IReadOnlyCollection<IntPtr> knownHandles,
             CancellationToken cancellationToken)
         {
             if (app == null)
@@ -42,7 +44,13 @@ namespace TopToolbar.Services.Workspaces
             // Priority: AUMID -> PackageFullName -> Path.
             if (!string.IsNullOrWhiteSpace(app.AppUserModelId))
             {
-                var result = await LaunchByAppUserModelIdSimpleAsync(app, windowTracker, windowWaitTimeout, windowPollInterval, cancellationToken).ConfigureAwait(false);
+                var result = await LaunchByAppUserModelIdSimpleAsync(
+                    app,
+                    windowManager,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    knownHandles,
+                    cancellationToken).ConfigureAwait(false);
                 if (result.Succeeded)
                 {
                     return result;
@@ -51,7 +59,13 @@ namespace TopToolbar.Services.Workspaces
 
             if (!string.IsNullOrWhiteSpace(app.PackageFullName))
             {
-                var result = await LaunchByPackageFullNameSimpleAsync(app, windowTracker, windowWaitTimeout, windowPollInterval, cancellationToken).ConfigureAwait(false);
+                var result = await LaunchByPackageFullNameSimpleAsync(
+                    app,
+                    windowManager,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    knownHandles,
+                    cancellationToken).ConfigureAwait(false);
                 if (result.Succeeded)
                 {
                     return result;
@@ -60,17 +74,66 @@ namespace TopToolbar.Services.Workspaces
 
             if (!string.IsNullOrWhiteSpace(app.Path))
             {
-                return await LaunchWin32AppSimpleAsync(app, windowTracker, windowWaitTimeout, windowPollInterval, cancellationToken).ConfigureAwait(false);
+                return await LaunchWin32AppSimpleAsync(
+                    app,
+                    windowManager,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    knownHandles,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             return AppWindowResult.Failed;
         }
 
-        private static async Task<AppWindowResult> LaunchByAppUserModelIdSimpleAsync(
+        private static async Task<IReadOnlyList<WindowInfo>> WaitForAppWindowsAsync(
             ApplicationDefinition app,
-            WindowTracker windowTracker,
+            WindowManager windowManager,
             TimeSpan windowWaitTimeout,
             TimeSpan windowPollInterval,
+            IReadOnlyCollection<IntPtr> knownHandles,
+            CancellationToken cancellationToken)
+        {
+            var predicate = new Func<WindowInfo, bool>(window => WorkspaceWindowMatcher.IsMatch(window, app));
+            var windows = await windowManager
+                .WaitForWindowsAsync(
+                    predicate,
+                    knownHandles ?? Array.Empty<IntPtr>(),
+                    0,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (windows.Count == 0)
+            {
+                windows = windowManager.FindMatches(predicate);
+            }
+
+            if (knownHandles == null || knownHandles.Count == 0)
+            {
+                return windows;
+            }
+
+            var filtered = new List<WindowInfo>();
+            var known = new HashSet<IntPtr>(knownHandles);
+            foreach (var window in windows)
+            {
+                if (!known.Contains(window.Handle))
+                {
+                    filtered.Add(window);
+                }
+            }
+
+            return filtered;
+        }
+
+        private static async Task<AppWindowResult> LaunchByAppUserModelIdSimpleAsync(
+            ApplicationDefinition app,
+            WindowManager windowManager,
+            TimeSpan windowWaitTimeout,
+            TimeSpan windowPollInterval,
+            IReadOnlyCollection<IntPtr> knownHandles,
             CancellationToken cancellationToken)
         {
             try
@@ -87,14 +150,14 @@ namespace TopToolbar.Services.Workspaces
                     Marshal.ThrowExceptionForHR(hr);
                 }
 
-                var windows = await windowTracker
-                    .WaitForAppWindowsAsync(app, Array.Empty<IntPtr>(), 0, windowWaitTimeout, windowPollInterval, cancellationToken)
+                var windows = await WaitForAppWindowsAsync(
+                    app,
+                    windowManager,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    knownHandles,
+                    cancellationToken)
                     .ConfigureAwait(false);
-
-                if (windows.Count == 0)
-                {
-                    windows = windowTracker.FindMatches(app);
-                }
 
                 return windows.Count > 0 
                     ? new AppWindowResult(true, true, windows) 
@@ -103,20 +166,33 @@ namespace TopToolbar.Services.Workspaces
             catch (COMException ex)
             {
                 AppLogger.LogWarning($"WorkspaceRuntime: ActivateApplication failed for '{DescribeApp(app)}' - 0x{ex.HResult:X8} {ex.Message}.");
-                return await LaunchPackagedAppViaShellSimpleAsync(app, windowTracker, windowWaitTimeout, windowPollInterval, cancellationToken).ConfigureAwait(false);
+                return await LaunchPackagedAppViaShellSimpleAsync(
+                    app,
+                    windowManager,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    knownHandles,
+                    cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 AppLogger.LogWarning($"WorkspaceRuntime: Unexpected error launching '{DescribeApp(app)}' - {ex.Message}.");
-                return await LaunchPackagedAppViaShellSimpleAsync(app, windowTracker, windowWaitTimeout, windowPollInterval, cancellationToken).ConfigureAwait(false);
+                return await LaunchPackagedAppViaShellSimpleAsync(
+                    app,
+                    windowManager,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    knownHandles,
+                    cancellationToken).ConfigureAwait(false);
             }
         }
 
         private static async Task<AppWindowResult> LaunchPackagedAppViaShellSimpleAsync(
             ApplicationDefinition app,
-            WindowTracker windowTracker,
+            WindowManager windowManager,
             TimeSpan windowWaitTimeout,
             TimeSpan windowPollInterval,
+            IReadOnlyCollection<IntPtr> knownHandles,
             CancellationToken cancellationToken)
         {
             try
@@ -134,14 +210,14 @@ namespace TopToolbar.Services.Workspaces
                     return AppWindowResult.Failed;
                 }
 
-                var windows = await windowTracker
-                    .WaitForAppWindowsAsync(app, Array.Empty<IntPtr>(), 0, windowWaitTimeout, windowPollInterval, cancellationToken)
+                var windows = await WaitForAppWindowsAsync(
+                    app,
+                    windowManager,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    knownHandles,
+                    cancellationToken)
                     .ConfigureAwait(false);
-
-                if (windows.Count == 0)
-                {
-                    windows = windowTracker.FindMatches(app);
-                }
 
                 return windows.Count > 0 
                     ? new AppWindowResult(true, true, windows) 
@@ -156,9 +232,10 @@ namespace TopToolbar.Services.Workspaces
 
         private static async Task<AppWindowResult> LaunchByPackageFullNameSimpleAsync(
             ApplicationDefinition app,
-            WindowTracker windowTracker,
+            WindowManager windowManager,
             TimeSpan windowWaitTimeout,
             TimeSpan windowPollInterval,
+            IReadOnlyCollection<IntPtr> knownHandles,
             CancellationToken cancellationToken)
         {
             try
@@ -186,14 +263,14 @@ namespace TopToolbar.Services.Workspaces
                     return AppWindowResult.Failed;
                 }
 
-                var windows = await windowTracker
-                    .WaitForAppWindowsAsync(app, Array.Empty<IntPtr>(), 0, windowWaitTimeout, windowPollInterval, cancellationToken)
+                var windows = await WaitForAppWindowsAsync(
+                    app,
+                    windowManager,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    knownHandles,
+                    cancellationToken)
                     .ConfigureAwait(false);
-
-                if (windows.Count == 0)
-                {
-                    windows = windowTracker.FindMatches(app);
-                }
 
                 return windows.Count > 0 
                     ? new AppWindowResult(true, true, windows) 
@@ -212,9 +289,10 @@ namespace TopToolbar.Services.Workspaces
 
         private static async Task<AppWindowResult> LaunchWin32AppSimpleAsync(
             ApplicationDefinition app,
-            WindowTracker windowTracker,
+            WindowManager windowManager,
             TimeSpan windowWaitTimeout,
             TimeSpan windowPollInterval,
+            IReadOnlyCollection<IntPtr> knownHandles,
             CancellationToken cancellationToken)
         {
             var expandedPath = ExpandPath(app.Path);
@@ -245,14 +323,14 @@ namespace TopToolbar.Services.Workspaces
                     return AppWindowResult.Failed;
                 }
 
-                var windows = await windowTracker
-                    .WaitForAppWindowsAsync(app, Array.Empty<IntPtr>(), 0, windowWaitTimeout, windowPollInterval, cancellationToken)
+                var windows = await WaitForAppWindowsAsync(
+                    app,
+                    windowManager,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    knownHandles,
+                    cancellationToken)
                     .ConfigureAwait(false);
-
-                if (windows.Count == 0)
-                {
-                    windows = windowTracker.FindMatches(app);
-                }
 
                 return windows.Count > 0 
                     ? new AppWindowResult(true, true, windows) 

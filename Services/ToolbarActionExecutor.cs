@@ -10,6 +10,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.UI.Dispatching;
 using TopToolbar.Actions;
 using TopToolbar.Logging;
 using TopToolbar.Models;
@@ -20,11 +21,13 @@ namespace TopToolbar.Services
     {
         private readonly ActionProviderService _providerService;
         private readonly ActionContextFactory _contextFactory;
+        private readonly DispatcherQueue _dispatcher;
 
-        public ToolbarActionExecutor(ActionProviderService providerService, ActionContextFactory contextFactory)
+        public ToolbarActionExecutor(ActionProviderService providerService, ActionContextFactory contextFactory, DispatcherQueue dispatcher = null)
         {
             _providerService = providerService ?? throw new ArgumentNullException(nameof(providerService));
             _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+            _dispatcher = dispatcher;
         }
 
         public Task ExecuteAsync(ButtonGroup group, ToolbarButton button, CancellationToken cancellationToken = default)
@@ -57,10 +60,13 @@ namespace TopToolbar.Services
                 return;
             }
 
-            button.IsExecuting = true;
-            button.ProgressMessage = string.Empty;
-            button.ProgressValue = null;
-            button.StatusMessage = string.Empty;
+            RunOnUi(() =>
+            {
+                button.IsExecuting = true;
+                button.ProgressMessage = string.Empty;
+                button.ProgressValue = null;
+                button.StatusMessage = string.Empty;
+            });
 
             JsonElement? args = null;
             if (!string.IsNullOrWhiteSpace(action.ProviderArgumentsJson))
@@ -84,15 +90,18 @@ namespace TopToolbar.Services
                     return;
                 }
 
-                if (update.Percent.HasValue)
+                RunOnUi(() =>
                 {
-                    button.ProgressValue = update.Percent.Value;
-                }
+                    if (update.Percent.HasValue)
+                    {
+                        button.ProgressValue = update.Percent.Value;
+                    }
 
-                if (!string.IsNullOrWhiteSpace(update.Note))
-                {
-                    button.ProgressMessage = update.Note;
-                }
+                    if (!string.IsNullOrWhiteSpace(update.Note))
+                    {
+                        button.ProgressMessage = update.Note;
+                    }
+                });
             });
 
             try
@@ -103,27 +112,55 @@ namespace TopToolbar.Services
 
                 if (result != null)
                 {
-                    button.StatusMessage = string.IsNullOrWhiteSpace(result.Message)
-                        ? (result.Ok ? string.Empty : "Action failed.")
-                        : result.Message;
+                    RunOnUi(() =>
+                    {
+                        button.StatusMessage = string.IsNullOrWhiteSpace(result.Message)
+                            ? (result.Ok ? string.Empty : "Action failed.")
+                            : result.Message;
+                    });
                 }
             }
             catch (OperationCanceledException)
             {
-                button.StatusMessage = "Cancelled.";
+                RunOnUi(() =>
+                {
+                    button.StatusMessage = "Cancelled.";
+                });
                 throw;
             }
             catch (Exception ex)
             {
-                button.StatusMessage = ex.Message;
+                RunOnUi(() =>
+                {
+                    button.StatusMessage = ex.Message;
+                });
                 AppLogger.LogError($"ToolbarActionExecutor: provider invocation threw an exception. - {ex.Message}");
             }
             finally
             {
-                button.ProgressValue = null;
-                button.ProgressMessage = string.Empty;
-                button.IsExecuting = false;
+                RunOnUi(() =>
+                {
+                    button.ProgressValue = null;
+                    button.ProgressMessage = string.Empty;
+                    button.IsExecuting = false;
+                });
             }
+        }
+
+        private void RunOnUi(Action action)
+        {
+            if (action == null)
+            {
+                return;
+            }
+
+            if (_dispatcher == null || _dispatcher.HasThreadAccess)
+            {
+                action();
+                return;
+            }
+
+            _dispatcher.TryEnqueue(() => action());
         }
 
         private static void LaunchProcess(ToolbarAction action)

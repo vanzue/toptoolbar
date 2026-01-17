@@ -8,7 +8,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace TopToolbar.Services.Workspaces
+namespace TopToolbar.Services.Windowing
 {
     internal static partial class NativeWindowHelper
     {
@@ -87,7 +87,9 @@ namespace TopToolbar.Services.Workspaces
                 appUserModelId,
                 isVisible,
                 bounds,
-                className
+                className,
+                string.Empty,
+                0
             );
             return true;
         }

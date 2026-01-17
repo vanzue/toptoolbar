@@ -3,30 +3,74 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using TopToolbar.Logging;
+using TopToolbar.Services.Display;
+using TopToolbar.Services.Providers;
+using TopToolbar.Services.Windowing;
 
 namespace TopToolbar.Services.Workspaces
 {
-    internal sealed partial class WorkspacesRuntimeService : IDisposable
+    internal sealed class WorkspacesRuntimeService : IDisposable
     {
-        private readonly WorkspaceFileLoader _fileLoader;
-        private readonly WindowTracker _windowTracker;
+        private readonly WorkspaceProviderConfigStore _configStore;
+        private readonly WorkspaceDefinitionStore _definitionStore;
+        private readonly DisplayManager _displayManager;
+        private readonly WindowManager _windowManager;
         private readonly ManagedWindowRegistry _managedWindows;
+        private readonly WorkspaceSnapshotter _snapshotter;
+        private readonly WorkspaceLauncher _launcher;
         private bool _disposed;
 
         public WorkspacesRuntimeService(string workspacesPath = null)
         {
-            _fileLoader = new WorkspaceFileLoader(workspacesPath);
-            _windowTracker = new WindowTracker();
-            _managedWindows = new ManagedWindowRegistry();
+            _configStore = new WorkspaceProviderConfigStore(workspacesPath);
+            _definitionStore = new WorkspaceDefinitionStore(null, _configStore);
+            _displayManager = new DisplayManager();
+            _windowManager = new WindowManager(_displayManager);
+            _managedWindows = WindowClaimer.Instance.Registry;
+            _snapshotter = new WorkspaceSnapshotter(_definitionStore, _windowManager, _displayManager, _managedWindows);
+            _launcher = new WorkspaceLauncher(_definitionStore, _windowManager, _managedWindows);
 
             // Subscribe to window destruction events to keep ManagedWindowRegistry in sync
-            _windowTracker.WindowDestroyed += OnWindowDestroyed;
+            _windowManager.WindowDestroyed += OnWindowDestroyed;
         }
 
         private void OnWindowDestroyed(IntPtr hwnd)
         {
             // When a window is destroyed, remove it from the managed registry
+            var boundAppIds = _managedWindows.GetBoundAppIds(hwnd);
+            if (boundAppIds.Count > 0)
+            {
+                var entries = new List<string>(boundAppIds.Count);
+                foreach (var appId in boundAppIds)
+                {
+                    var workspaceId = _managedWindows.GetWorkspaceIdForApp(appId) ?? "<unknown>";
+                    entries.Add($"{appId}@{workspaceId}");
+                }
+
+                AppLogger.LogInfo($"WorkspaceRuntime: WindowDestroyed - unbinding handle={hwnd} apps=[{string.Join(", ", entries)}]");
+            }
+
             _managedWindows.UnbindWindow(hwnd);
+        }
+
+        public Task<WorkspaceDefinition> SnapshotAsync(
+            string workspaceName,
+            CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, nameof(WorkspacesRuntimeService));
+            return _snapshotter.SnapshotAsync(workspaceName, cancellationToken);
+        }
+
+        public Task<bool> LaunchWorkspaceAsync(
+            string workspaceId,
+            CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, nameof(WorkspacesRuntimeService));
+            return _launcher.LaunchWorkspaceAsync(workspaceId, cancellationToken);
         }
 
         public void Dispose()
@@ -37,8 +81,9 @@ namespace TopToolbar.Services.Workspaces
             }
 
             _disposed = true;
-            _windowTracker.WindowDestroyed -= OnWindowDestroyed;
-            _windowTracker.Dispose();
+            _windowManager.WindowDestroyed -= OnWindowDestroyed;
+            _windowManager.Dispose();
+            _displayManager.Dispose();
             GC.SuppressFinalize(this);
         }
     }

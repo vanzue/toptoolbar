@@ -185,7 +185,23 @@ namespace TopToolbar
 
             try
             {
-                using var workspaceProvider = new WorkspaceProvider();
+                WorkspaceProvider workspaceProvider = null;
+                if (_providerRuntime != null
+                    && _providerRuntime.TryGetProvider("WorkspaceProvider", out var provider))
+                {
+                    workspaceProvider = provider as WorkspaceProvider;
+                }
+
+                if (workspaceProvider == null)
+                {
+                    await ShowSimpleMessageAsync(
+                        root.XamlRoot,
+                        "Snapshot failed",
+                        "Workspace provider is not available."
+                    );
+                    return;
+                }
+
                 var workspace = await workspaceProvider
                     .SnapshotAsync(workspaceName, CancellationToken.None)
                     .ConfigureAwait(true);

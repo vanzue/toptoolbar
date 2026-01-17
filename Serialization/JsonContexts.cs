@@ -39,6 +39,7 @@ internal partial class ExtensionManifestJsonContext : JsonSerializerContext
     GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(TopToolbar.Models.Providers.WorkspaceProviderConfig))]
 [JsonSerializable(typeof(TopToolbar.Services.Workspaces.WorkspaceDefinition))]
+[JsonSerializable(typeof(TopToolbar.Services.Workspaces.WorkspaceDocument))]
 internal partial class WorkspaceProviderJsonContext : JsonSerializerContext
 {
 }

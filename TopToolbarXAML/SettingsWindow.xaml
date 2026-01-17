@@ -137,6 +137,7 @@
                                         CornerRadius="2"
                                         Background="#FF1E5AA7"
                                         Visibility="{Binding IsSelected, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"
+                                        x:SuppressXamlTrimWarnings="True"
                                         IsHitTestVisible="False"/>
                                 <VisualStateManager.VisualStateGroups>
                                     <VisualStateGroup x:Name="CommonStates">
@@ -343,7 +344,7 @@
                                         <Button Grid.Column="1"
                                                 x:Name="RenameButton"
                                                 Click="OnStartRenameGroup"
-                                                Tag="{Binding}"
+                                                Tag="{x:Bind}"
                                                 Style="{StaticResource ButtonStyleSmallIcon}"
                                                 ToolTipService.ToolTip="Rename"
                                                 Width="28"
@@ -490,7 +491,7 @@
                                                                      Visibility="{x:Bind IsIconCustomized, Mode=OneWay}">
                                                 <Button Content="Choose from library"
                                                         Click="OnChooseIconFromLibrary"
-                                                        Tag="{Binding}" />
+                                                        Tag="{x:Bind}" />
                                             </tkcontrols:SettingsCard>
                                             <tkcontrols:SettingsCard Header="Image Path"
                                                                      Visibility="{x:Bind IsIconCustomized, Mode=OneWay}">
@@ -505,7 +506,7 @@
                                                     <Button Grid.Column="1"
                                                             Content="Browse"
                                                             Click="OnBrowseIcon"
-                                                            Tag="{Binding}"/>
+                                                            Tag="{x:Bind}"/>
                                                 </Grid>
                                             </tkcontrols:SettingsCard>
                                         </tkcontrols:SettingsExpander.Items>

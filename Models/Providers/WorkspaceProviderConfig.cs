@@ -28,6 +28,6 @@ namespace TopToolbar.Models.Providers
 
         public List<WorkspaceButtonConfig> Buttons { get; set; } = new();
 
-        public WorkspaceProviderData Data { get; set; } = new();
+        public WorkspaceProviderData Data { get; set; }
     }
 }

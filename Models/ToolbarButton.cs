@@ -3,11 +3,11 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
-using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
-using TopToolbar.Services;
+using Microsoft.UI.Xaml;
 
 namespace TopToolbar.Models;
 
@@ -35,37 +35,39 @@ public partial class ToolbarButton : INotifyPropertyChanged
 
     private string _name = string.Empty;
 
-    public string Name
-    {
-        get => _name;
-        set
+        public string Name
         {
-            if (_name != value)
+            get => _name;
+            set
             {
-                _name = value ?? string.Empty;
-                OnPropertyChanged();
+                if (_name != value)
+                {
+                    _name = value ?? string.Empty;
+                    OnPropertyChanged();
 
-                // Also notify DisplayName since it depends on Name
-                OnPropertyChanged(nameof(DisplayName));
+                    // Also notify DisplayName since it depends on Name
+                    OnPropertyChanged(nameof(DisplayName));
+                    OnPropertyChanged(nameof(ToolTipText));
+                }
             }
         }
-    }
 
     private string _description = string.Empty;
 
-    public string Description
-    {
-        get => _description;
-        set
+        public string Description
         {
-            if (_description != value)
+            get => _description;
+            set
             {
-                _description = value ?? string.Empty;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(HasDescription));
+                if (_description != value)
+                {
+                    _description = value ?? string.Empty;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(HasDescription));
+                    OnPropertyChanged(nameof(ToolTipText));
+                }
             }
         }
-    }
 
     private ToolbarIconType _iconType = ToolbarIconType.Catalog;
 
@@ -180,18 +182,19 @@ public partial class ToolbarButton : INotifyPropertyChanged
 
     private bool _isEnabled = true;
 
-    public bool IsEnabled
-    {
-        get => _isEnabled;
-        set
+        public bool IsEnabled
         {
-            if (_isEnabled != value)
+            get => _isEnabled;
+            set
             {
-                _isEnabled = value;
-                OnPropertyChanged();
+                if (_isEnabled != value)
+                {
+                    _isEnabled = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsActionEnabled));
+                }
             }
         }
-    }
 
     private bool _isIconCustomized;
 
@@ -212,18 +215,21 @@ public partial class ToolbarButton : INotifyPropertyChanged
     private bool _isExecuting;
 
     [JsonIgnore]
-    public bool IsExecuting
-    {
-        get => _isExecuting;
-        set
+        public bool IsExecuting
         {
-            if (_isExecuting != value)
+            get => _isExecuting;
+            set
             {
-                _isExecuting = value;
-                OnPropertyChanged();
+                if (_isExecuting != value)
+                {
+                    _isExecuting = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsActionEnabled));
+                    OnPropertyChanged(nameof(IconOpacity));
+                    OnPropertyChanged(nameof(ProgressVisibility));
+                }
             }
         }
-    }
 
     [JsonIgnore]
     private double? _progressValue;
@@ -246,35 +252,37 @@ public partial class ToolbarButton : INotifyPropertyChanged
     private string _progressMessage = string.Empty;
 
     [JsonIgnore]
-    public string ProgressMessage
-    {
-        get => _progressMessage;
-        set
+        public string ProgressMessage
         {
-            if (_progressMessage != value)
+            get => _progressMessage;
+            set
             {
-                _progressMessage = value ?? string.Empty;
-                OnPropertyChanged();
+                if (_progressMessage != value)
+                {
+                    _progressMessage = value ?? string.Empty;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(ToolTipText));
+                }
             }
         }
-    }
 
     [JsonIgnore]
     private string _statusMessage = string.Empty;
 
     [JsonIgnore]
-    public string StatusMessage
-    {
-        get => _statusMessage;
-        set
+        public string StatusMessage
         {
-            if (_statusMessage != value)
+            get => _statusMessage;
+            set
             {
-                _statusMessage = value ?? string.Empty;
-                OnPropertyChanged();
+                if (_statusMessage != value)
+                {
+                    _statusMessage = value ?? string.Empty;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(ToolTipText));
+                }
             }
         }
-    }
 
     [JsonIgnore]
     private double? _sortOrder;
@@ -316,6 +324,15 @@ public partial class ToolbarButton : INotifyPropertyChanged
     [JsonIgnore]
     public bool IsCatalogIcon => IconType == ToolbarIconType.Catalog;
 
+    [JsonIgnore]
+    public bool IsActionEnabled => IsEnabled && !IsExecuting;
+
+    [JsonIgnore]
+    public double IconOpacity => IsExecuting ? 0.4 : 1.0;
+
+    [JsonIgnore]
+    public Visibility ProgressVisibility => IsExecuting ? Visibility.Visible : Visibility.Collapsed;
+
     private ToolbarAction _action = new();
 
     public ToolbarAction Action
@@ -356,4 +373,38 @@ public partial class ToolbarButton : INotifyPropertyChanged
 
     [JsonIgnore]
     public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
+
+    [JsonIgnore]
+    public string ToolTipText => BuildToolTipText();
+
+    private string BuildToolTipText()
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(Name))
+        {
+            parts.Add(Name);
+        }
+
+        if (!string.IsNullOrWhiteSpace(Description))
+        {
+            parts.Add(Description);
+        }
+
+        if (!string.IsNullOrWhiteSpace(ProgressMessage))
+        {
+            parts.Add(ProgressMessage);
+        }
+        else if (!string.IsNullOrWhiteSpace(StatusMessage))
+        {
+            parts.Add(StatusMessage);
+        }
+
+        if (parts.Count == 0)
+        {
+            return Name ?? string.Empty;
+        }
+
+        return string.Join(Environment.NewLine, parts);
+    }
 }

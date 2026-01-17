@@ -7,10 +7,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using TopToolbar.Logging;
+using TopToolbar.Services.Display;
+using TopToolbar.Services.Windowing;
 
 namespace TopToolbar.Services.Workspaces
 {
-    internal sealed partial class WorkspacesRuntimeService
+    internal sealed class WorkspaceSnapshotter
     {
         private const string ApplicationFrameHostProcessName = "ApplicationFrameHost.exe";
         private static readonly HashSet<string> ExcludedWindowClasses = new(
@@ -39,13 +42,27 @@ namespace TopToolbar.Services.Workspaces
             "Program Manager",
         };
 
+        private readonly WorkspaceDefinitionStore _definitionStore;
+        private readonly DisplayManager _displayManager;
+        private readonly WindowManager _windowManager;
+        private readonly ManagedWindowRegistry _managedWindows;
+        public WorkspaceSnapshotter(
+            WorkspaceDefinitionStore definitionStore,
+            WindowManager windowManager,
+            DisplayManager displayManager,
+            ManagedWindowRegistry managedWindows)
+        {
+            _definitionStore = definitionStore ?? throw new ArgumentNullException(nameof(definitionStore));
+            _windowManager = windowManager ?? throw new ArgumentNullException(nameof(windowManager));
+            _displayManager = displayManager ?? throw new ArgumentNullException(nameof(displayManager));
+            _managedWindows = managedWindows ?? throw new ArgumentNullException(nameof(managedWindows));
+        }
+
         public async Task<WorkspaceDefinition> SnapshotAsync(
             string workspaceName,
             CancellationToken cancellationToken
         )
         {
-            ObjectDisposedException.ThrowIf(_disposed, nameof(WorkspacesRuntimeService));
-
             if (string.IsNullOrWhiteSpace(workspaceName))
             {
                 throw new ArgumentException(
@@ -55,9 +72,10 @@ namespace TopToolbar.Services.Workspaces
             }
 
             var trimmedName = workspaceName.Trim();
-            var monitorSnapshots = CaptureMonitorSnapshots();
-            var windows = _windowTracker.GetSnapshot();
+            var monitors = _displayManager.GetSnapshot();
+            var windows = _windowManager.GetSnapshot();
             var applications = new List<ApplicationDefinition>();
+            var windowBindings = new Dictionary<string, IntPtr>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var window in windows)
             {
@@ -68,7 +86,7 @@ namespace TopToolbar.Services.Workspaces
                     continue;
                 }
 
-                var app = CreateApplicationDefinitionFromWindow(window, monitorSnapshots);
+                var app = CreateApplicationDefinitionFromWindow(window, monitors);
                 if (app != null)
                 {
                     if (!string.IsNullOrWhiteSpace(effectiveProcessPath))
@@ -83,6 +101,11 @@ namespace TopToolbar.Services.Workspaces
                     }
 
                     applications.Add(app);
+
+                    if (window.Handle != IntPtr.Zero && !string.IsNullOrWhiteSpace(app.Id))
+                    {
+                        windowBindings[app.Id] = window.Handle;
+                    }
                 }
             }
 
@@ -101,12 +124,12 @@ namespace TopToolbar.Services.Workspaces
                 Applications = applications,
             };
 
-            if (monitorSnapshots.Count > 0)
+            if (monitors.Count > 0)
             {
-                var monitorDefinitions = new List<MonitorDefinition>(monitorSnapshots.Count);
-                foreach (var snapshot in monitorSnapshots)
+                var monitorDefinitions = new List<MonitorDefinition>(monitors.Count);
+                foreach (var monitor in monitors)
                 {
-                    monitorDefinitions.Add(snapshot.Definition);
+                    monitorDefinitions.Add(CreateMonitorDefinition(monitor));
                 }
 
                 workspace.Monitors = monitorDefinitions;
@@ -116,24 +139,25 @@ namespace TopToolbar.Services.Workspaces
                 workspace.Monitors = new List<MonitorDefinition>();
             }
 
-            await _fileLoader
+            await _definitionStore
                 .SaveWorkspaceAsync(workspace, cancellationToken)
                 .ConfigureAwait(false);
 
-            // Bind snapshotted windows to their app configurations
-            BindSnapshotWindows(workspace);
+            BindSnapshotWindows(workspace, windowBindings);
 
             return workspace;
         }
 
-        private void BindSnapshotWindows(WorkspaceDefinition workspace)
+        private void BindSnapshotWindows(
+            WorkspaceDefinition workspace,
+            IReadOnlyDictionary<string, IntPtr> windowBindings)
         {
-            if (workspace?.Applications == null)
+            if (workspace?.Applications == null || windowBindings == null || windowBindings.Count == 0)
             {
                 return;
             }
 
-            var windows = _windowTracker.GetSnapshot();
+            var boundCount = 0;
             foreach (var app in workspace.Applications)
             {
                 if (string.IsNullOrWhiteSpace(app?.Id))
@@ -141,23 +165,16 @@ namespace TopToolbar.Services.Workspaces
                     continue;
                 }
 
-                // Find the window that matches this app by title (most specific match)
-                foreach (var window in windows)
+                if (windowBindings.TryGetValue(app.Id, out var hwnd) && hwnd != IntPtr.Zero)
                 {
-                    if (window == null || window.Handle == IntPtr.Zero)
-                    {
-                        continue;
-                    }
-
-                    // Match by title first (most specific)
-                    if (!string.IsNullOrWhiteSpace(app.Title)
-                        && !string.IsNullOrWhiteSpace(window.Title)
-                        && string.Equals(window.Title, app.Title, StringComparison.Ordinal))
-                    {
-                        _managedWindows.BindWindow(workspace.Id, app.Id, window.Handle);
-                        break;
-                    }
+                    _managedWindows.BindWindowShared(workspace.Id, app.Id, hwnd);
+                    boundCount++;
                 }
+            }
+
+            if (boundCount > 0)
+            {
+                AppLogger.LogInfo($"WorkspaceSnapshot: bound {boundCount} window(s) for workspace '{workspace.Id}'");
             }
         }
 
@@ -298,9 +315,39 @@ namespace TopToolbar.Services.Workspaces
             return false;
         }
 
+        private static MonitorDefinition CreateMonitorDefinition(DisplayMonitor monitor)
+        {
+            if (monitor == null)
+            {
+                return new MonitorDefinition();
+            }
+
+            return new MonitorDefinition
+            {
+                Id = monitor.Id ?? string.Empty,
+                InstanceId = monitor.InstanceId ?? string.Empty,
+                Number = monitor.Index,
+                Dpi = monitor.Dpi,
+                DpiAwareRect = new MonitorDefinition.MonitorRect
+                {
+                    Left = monitor.DpiAwareRect.Left,
+                    Top = monitor.DpiAwareRect.Top,
+                    Width = monitor.DpiAwareRect.Width,
+                    Height = monitor.DpiAwareRect.Height,
+                },
+                DpiUnawareRect = new MonitorDefinition.MonitorRect
+                {
+                    Left = monitor.DpiUnawareRect.Left,
+                    Top = monitor.DpiUnawareRect.Top,
+                    Width = monitor.DpiUnawareRect.Width,
+                    Height = monitor.DpiUnawareRect.Height,
+                },
+            };
+        }
+
         private ApplicationDefinition CreateApplicationDefinitionFromWindow(
             WindowInfo window,
-            IReadOnlyList<MonitorSnapshot> monitors
+            IReadOnlyList<DisplayMonitor> monitors
         )
         {
             if (window == null)
@@ -389,7 +436,7 @@ namespace TopToolbar.Services.Workspaces
 
         private static int FindMonitorIndex(
             WindowBounds bounds,
-            IReadOnlyList<MonitorSnapshot> monitors
+            IReadOnlyList<DisplayMonitor> monitors
         )
         {
             if (monitors == null || monitors.Count == 0)
@@ -413,21 +460,21 @@ namespace TopToolbar.Services.Workspaces
                     && centerY < monitor.Bottom
                 )
                 {
-                    return i;
+                    return monitors[i].Index;
                 }
 
                 var area = CalculateIntersectionArea(bounds, monitor);
                 if (area > bestArea)
                 {
                     bestArea = area;
-                    bestIndex = i;
+                    bestIndex = monitors[i].Index;
                 }
             }
 
             return bestIndex;
         }
 
-        private static long CalculateIntersectionArea(WindowBounds window, MonitorBounds monitor)
+        private static long CalculateIntersectionArea(WindowBounds window, DisplayRect monitor)
         {
             var left = Math.Max(window.Left, monitor.Left);
             var top = Math.Max(window.Top, monitor.Top);

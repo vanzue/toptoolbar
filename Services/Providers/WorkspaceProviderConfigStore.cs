@@ -7,22 +7,20 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using TopToolbar;
 using TopToolbar.Models.Providers;
 using TopToolbar.Serialization;
+using TopToolbar.Services.Workspaces;
 
 namespace TopToolbar.Services.Providers
 {
     internal sealed class WorkspaceProviderConfigStore
     {
-        private const string WorkspaceProviderFileName = "WorkspaceProvider.json";
-
         private readonly string _filePath;
 
         public WorkspaceProviderConfigStore(string filePath = null)
         {
             _filePath = string.IsNullOrWhiteSpace(filePath)
-                ? Path.Combine(AppPaths.ProvidersDirectory, WorkspaceProviderFileName)
+                ? WorkspaceStoragePaths.GetProviderConfigPath()
                 : filePath;
         }
 
@@ -78,7 +76,6 @@ namespace TopToolbar.Services.Providers
             return new WorkspaceProviderConfig
             {
                 Buttons = new System.Collections.Generic.List<WorkspaceButtonConfig>(),
-                Data = new WorkspaceProviderData(),
             };
         }
     }

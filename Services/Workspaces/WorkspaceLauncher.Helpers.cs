@@ -5,12 +5,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
 using TopToolbar.Logging;
 
 namespace TopToolbar.Services.Workspaces
 {
-    internal sealed partial class WorkspacesRuntimeService
+    internal sealed partial class WorkspaceLauncher
     {
         private static string DescribeApp(ApplicationDefinition app)
         {
@@ -56,43 +55,6 @@ namespace TopToolbar.Services.Workspaces
             return string.Equals(fileName, "ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static string ExpandPath(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return string.Empty;
-            }
-
-            try
-            {
-                return Environment.ExpandEnvironmentVariables(path).Trim('"');
-            }
-            catch
-            {
-                return path.Trim('"');
-            }
-        }
-
-        private static string DetermineWorkingDirectory(string path, bool useShellExecute)
-        {
-            if (useShellExecute)
-            {
-                return AppContext.BaseDirectory;
-            }
-
-            try
-            {
-                var directory = Path.GetDirectoryName(path);
-                if (!string.IsNullOrWhiteSpace(directory))
-                {
-                    return directory;
-                }
-            }
-            catch { }
-
-            return AppContext.BaseDirectory;
-        }
-
         private static void LogPerf(string message)
         {
             try
@@ -109,41 +71,6 @@ namespace TopToolbar.Services.Workspaces
                 catch { }
             }
             catch { }
-        }
-
-        [ComImport]
-        [Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C")]
-        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        private interface IApplicationActivationManager
-        {
-            int ActivateApplication(
-                string appUserModelId,
-                string arguments,
-                ActivateOptions options,
-                out uint processId
-            );
-
-            int ActivateForFile(
-                string appUserModelId,
-                IntPtr itemArray,
-                string verb,
-                out uint processId
-            );
-
-            int ActivateForProtocol(string appUserModelId, IntPtr itemArray, out uint processId);
-        }
-
-        [ComImport]
-        [Guid("2E941141-7F97-4756-BA1D-9DECDE894A3D")]
-        private class ApplicationActivationManager { }
-
-        [Flags]
-        private enum ActivateOptions
-        {
-            None = 0x0,
-            DesignMode = 0x1,
-            NoErrorUI = 0x2,
-            NoSplashScreen = 0x4,
         }
     }
 }

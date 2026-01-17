@@ -8,15 +8,17 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using TopToolbar.Services.Display;
 
-namespace TopToolbar.Services.Workspaces
+namespace TopToolbar.Services.Windowing
 {
-    internal sealed class WindowTracker : IDisposable
+    internal sealed class WindowManager : IDisposable
     {
         private const uint EventObjectCreate = 0x8000;
         private const uint EventObjectDestroy = 0x8001;
         private const uint EventObjectShow = 0x8002;
         private const uint EventObjectHide = 0x8003;
+        private const uint EventObjectLocationChange = 0x800B;
         private const uint EventObjectNameChange = 0x800C;
         private const uint EventSystemForeground = 0x0003;
         private const uint EventFlagOutOfContext = 0x0000;
@@ -27,6 +29,7 @@ namespace TopToolbar.Services.Workspaces
         private readonly List<IntPtr> _hookHandles = new();
         private readonly object _gate = new();
         private readonly WinEventDelegate _winEventCallback;
+        private readonly DisplayManager _displayManager;
         private bool _disposed;
 
         /// <summary>
@@ -34,11 +37,21 @@ namespace TopToolbar.Services.Workspaces
         /// </summary>
         public event Action<IntPtr> WindowDestroyed;
 
-        public WindowTracker()
+        public event Action<WindowInfo> WindowCreated;
+
+        public event Action<WindowInfo> WindowUpdated;
+
+        public WindowManager(DisplayManager displayManager = null)
         {
+            _displayManager = displayManager;
             _winEventCallback = OnWinEvent;
             RefreshAllWindows();
             StartListening();
+
+            if (_displayManager != null)
+            {
+                _displayManager.MonitorsChanged += OnMonitorsChanged;
+            }
         }
 
         public IReadOnlyList<WindowInfo> GetSnapshot()
@@ -49,17 +62,24 @@ namespace TopToolbar.Services.Workspaces
             }
         }
 
-        public IReadOnlyList<WindowInfo> FindMatches(ApplicationDefinition app)
+        public bool TryGetWindow(IntPtr hwnd, out WindowInfo info)
         {
-            return FindMatches(app, 0);
+            lock (_gate)
+            {
+                return _windows.TryGetValue(hwnd, out info);
+            }
+        }
+
+        public IReadOnlyList<WindowInfo> FindMatches(Func<WindowInfo, bool> predicate)
+        {
+            return FindMatches(predicate, 0);
         }
 
         public IReadOnlyList<WindowInfo> FindMatches(
-            ApplicationDefinition app,
-            uint expectedProcessId
-        )
+            Func<WindowInfo, bool> predicate,
+            uint expectedProcessId)
         {
-            if (app == null)
+            if (predicate == null)
             {
                 return Array.Empty<WindowInfo>();
             }
@@ -79,7 +99,7 @@ namespace TopToolbar.Services.Workspaces
                         continue;
                     }
 
-                    if (NativeWindowHelper.IsMatch(window, app))
+                    if (predicate(window))
                     {
                         matches.Add(window);
                     }
@@ -89,8 +109,8 @@ namespace TopToolbar.Services.Workspaces
             }
         }
 
-        public async Task<IReadOnlyList<WindowInfo>> WaitForAppWindowsAsync(
-            ApplicationDefinition app,
+        public async Task<IReadOnlyList<WindowInfo>> WaitForWindowsAsync(
+            Func<WindowInfo, bool> predicate,
             IReadOnlyCollection<IntPtr> knownHandles,
             uint expectedProcessId,
             TimeSpan timeout,
@@ -98,6 +118,11 @@ namespace TopToolbar.Services.Workspaces
             CancellationToken cancellationToken
         )
         {
+            if (predicate == null)
+            {
+                return Array.Empty<WindowInfo>();
+            }
+
             var known =
                 knownHandles != null && knownHandles.Count > 0
                     ? new HashSet<IntPtr>(knownHandles)
@@ -108,7 +133,7 @@ namespace TopToolbar.Services.Workspaces
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var matches = FindMatches(app, expectedProcessId);
+                var matches = FindMatches(predicate, expectedProcessId);
                 if (matches.Count > 0)
                 {
                     var newMatches = new List<WindowInfo>();
@@ -139,6 +164,11 @@ namespace TopToolbar.Services.Workspaces
                 return;
             }
 
+            if (_displayManager != null)
+            {
+                _displayManager.MonitorsChanged -= OnMonitorsChanged;
+            }
+
             lock (_gate)
             {
                 foreach (var handle in _hookHandles)
@@ -164,6 +194,7 @@ namespace TopToolbar.Services.Workspaces
             RegisterHook(EventObjectDestroy);
             RegisterHook(EventObjectShow);
             RegisterHook(EventObjectHide);
+            RegisterHook(EventObjectLocationChange);
             RegisterHook(EventObjectNameChange);
         }
 
@@ -203,7 +234,7 @@ namespace TopToolbar.Services.Workspaces
 
         private void RefreshWindow(IntPtr hwnd)
         {
-            if (hwnd == IntPtr.Zero)
+            if (hwnd == IntPtr.Zero || _disposed)
             {
                 return;
             }
@@ -214,10 +245,101 @@ namespace TopToolbar.Services.Workspaces
                 return;
             }
 
+            info = AttachMonitorInfo(info);
+
+            bool isNew = false;
             lock (_gate)
             {
-                _windows[hwnd] = info;
+                if (_windows.ContainsKey(hwnd))
+                {
+                    _windows[hwnd] = info;
+                }
+                else
+                {
+                    _windows.Add(hwnd, info);
+                    isNew = true;
+                }
             }
+
+            try
+            {
+                if (isNew)
+                {
+                    WindowCreated?.Invoke(info);
+                }
+                else
+                {
+                    WindowUpdated?.Invoke(info);
+                }
+            }
+            catch
+            {
+                // Suppress event handler exceptions.
+            }
+        }
+
+        private WindowInfo AttachMonitorInfo(WindowInfo info)
+        {
+            if (info == null || _displayManager == null)
+            {
+                return info;
+            }
+
+            if (_displayManager.TryResolveMonitorForRect(
+                info.Bounds.Left,
+                info.Bounds.Top,
+                info.Bounds.Right,
+                info.Bounds.Bottom,
+                out var monitor))
+            {
+                return info.WithMonitor(monitor.Id, monitor.Index);
+            }
+
+            return info.WithMonitor(string.Empty, 0);
+        }
+
+        private void UpdateMonitorAssignments()
+        {
+            if (_displayManager == null)
+            {
+                return;
+            }
+
+            List<WindowInfo> changed = null;
+            lock (_gate)
+            {
+                foreach (var entry in _windows)
+                {
+                    var updated = AttachMonitorInfo(entry.Value);
+                    if (!ReferenceEquals(updated, entry.Value))
+                    {
+                        _windows[entry.Key] = updated;
+                        changed ??= new List<WindowInfo>();
+                        changed.Add(updated);
+                    }
+                }
+            }
+
+            if (changed == null)
+            {
+                return;
+            }
+
+            foreach (var info in changed)
+            {
+                try
+                {
+                    WindowUpdated?.Invoke(info);
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private void OnMonitorsChanged(object sender, EventArgs e)
+        {
+            UpdateMonitorAssignments();
         }
 
         private void RemoveWindow(IntPtr hwnd)
@@ -257,6 +379,11 @@ namespace TopToolbar.Services.Workspaces
             uint dwmsEventTime
         )
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             if (idObject != ObjectIdWindow || idChild != 0 || hwnd == IntPtr.Zero)
             {
                 return;
@@ -270,6 +397,7 @@ namespace TopToolbar.Services.Workspaces
                 case EventObjectHide:
                 case EventObjectShow:
                 case EventObjectCreate:
+                case EventObjectLocationChange:
                 case EventObjectNameChange:
                 case EventSystemForeground:
                     RefreshWindow(hwnd);
@@ -307,6 +435,5 @@ namespace TopToolbar.Services.Workspaces
         private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
 
         private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
-
     }
 }

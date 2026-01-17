@@ -9,9 +9,9 @@ using System.Runtime.InteropServices;
 namespace TopToolbar.Services.Workspaces
 {
     /// <summary>
-    /// Tracks which windows are managed by which workspace applications.
-    /// When a workspace is snapshotted, windows are bound to their app configurations.
-    /// When launching, we use these bindings to identify which window belongs to which app.
+    /// Tracks which windows are bound to which workspace applications at runtime.
+    /// The launcher creates exclusive bindings; snapshot can add shared bindings for reuse.
+    /// Bindings are invalidated when windows are destroyed.
     /// </summary>
     internal sealed class ManagedWindowRegistry
     {
@@ -20,16 +20,17 @@ namespace TopToolbar.Services.Workspaces
         // Maps app ID -> window handle
         private readonly Dictionary<string, IntPtr> _appToWindow = new(StringComparer.OrdinalIgnoreCase);
 
-        // Maps window handle -> app ID (reverse lookup)
-        private readonly Dictionary<IntPtr, string> _windowToApp = new();
+        // Maps window handle -> app IDs (reverse lookup)
+        private readonly Dictionary<IntPtr, HashSet<string>> _windowToApps = new();
 
         // Tracks which workspace each app belongs to
         private readonly Dictionary<string, string> _appToWorkspace = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Binds a window handle to an application definition.
+        /// Binds a window handle to an application definition, allowing shared bindings.
+        /// Used by snapshot to record window reuse across workspaces.
         /// </summary>
-        public void BindWindow(string workspaceId, string appId, IntPtr hwnd)
+        public void BindWindowShared(string workspaceId, string appId, IntPtr hwnd)
         {
             if (string.IsNullOrWhiteSpace(appId) || hwnd == IntPtr.Zero)
             {
@@ -38,21 +39,14 @@ namespace TopToolbar.Services.Workspaces
 
             lock (_gate)
             {
-                // Remove any existing binding for this app
-                if (_appToWindow.TryGetValue(appId, out var oldHwnd))
+                // Remove any existing binding for this app (it might be bound to another window)
+                if (_appToWindow.TryGetValue(appId, out var oldHwnd) && oldHwnd != hwnd)
                 {
-                    _windowToApp.Remove(oldHwnd);
-                }
-
-                // Remove any existing binding for this window (it might be bound to another app)
-                if (_windowToApp.TryGetValue(hwnd, out var oldAppId))
-                {
-                    _appToWindow.Remove(oldAppId);
-                    _appToWorkspace.Remove(oldAppId);
+                    RemoveAppFromWindow(oldHwnd, appId);
                 }
 
                 _appToWindow[appId] = hwnd;
-                _windowToApp[hwnd] = appId;
+                AddAppToWindow(hwnd, appId);
 
                 if (!string.IsNullOrWhiteSpace(workspaceId))
                 {
@@ -75,25 +69,37 @@ namespace TopToolbar.Services.Workspaces
             lock (_gate)
             {
                 // Check if already bound to another app
-                if (_windowToApp.TryGetValue(hwnd, out var existingAppId))
+                if (_windowToApps.TryGetValue(hwnd, out var existingApps) && existingApps.Count > 0)
                 {
-                    if (!string.Equals(existingAppId, appId, StringComparison.OrdinalIgnoreCase))
+                    if (!existingApps.Contains(appId))
                     {
                         // Window is already bound to a different app
                         return false;
                     }
+
                     // Already bound to the same app - success
+                    if (_appToWindow.TryGetValue(appId, out var oldHwnd) && oldHwnd != hwnd)
+                    {
+                        RemoveAppFromWindow(oldHwnd, appId);
+                    }
+
+                    _appToWindow[appId] = hwnd;
+                    if (!string.IsNullOrWhiteSpace(workspaceId))
+                    {
+                        _appToWorkspace[appId] = workspaceId;
+                    }
+
                     return true;
                 }
 
                 // Remove any existing binding for this app (app might have a different window bound)
-                if (_appToWindow.TryGetValue(appId, out var oldHwnd))
+                if (_appToWindow.TryGetValue(appId, out var previousHwnd))
                 {
-                    _windowToApp.Remove(oldHwnd);
+                    RemoveAppFromWindow(previousHwnd, appId);
                 }
 
                 _appToWindow[appId] = hwnd;
-                _windowToApp[hwnd] = appId;
+                AddAppToWindow(hwnd, appId);
 
                 if (!string.IsNullOrWhiteSpace(workspaceId))
                 {
@@ -124,17 +130,7 @@ namespace TopToolbar.Services.Workspaces
                 }
 
                 // Verify bidirectional consistency - the window should still be bound to this app
-                if (_windowToApp.TryGetValue(hwnd, out var currentAppId))
-                {
-                    if (!string.Equals(currentAppId, appId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Window has been rebound to another app - clean up stale mapping
-                        _appToWindow.Remove(appId);
-                        _appToWorkspace.Remove(appId);
-                        return IntPtr.Zero;
-                    }
-                }
-                else
+                if (!_windowToApps.TryGetValue(hwnd, out var currentApps) || !currentApps.Contains(appId))
                 {
                     // Inconsistent state - clean up
                     _appToWindow.Remove(appId);
@@ -147,7 +143,7 @@ namespace TopToolbar.Services.Workspaces
                 {
                     // Window was destroyed, clean up binding
                     _appToWindow.Remove(appId);
-                    _windowToApp.Remove(hwnd);
+                    RemoveAppFromWindow(hwnd, appId);
                     _appToWorkspace.Remove(appId);
                     return IntPtr.Zero;
                 }
@@ -168,7 +164,52 @@ namespace TopToolbar.Services.Workspaces
 
             lock (_gate)
             {
-                return _windowToApp.TryGetValue(hwnd, out var appId) ? appId : null;
+                if (_windowToApps.TryGetValue(hwnd, out var appIds))
+                {
+                    foreach (var appId in appIds)
+                    {
+                        return appId;
+                    }
+                }
+
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets all app IDs that a window is bound to, if any.
+        /// </summary>
+        public IReadOnlyList<string> GetBoundAppIds(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero)
+            {
+                return Array.Empty<string>();
+            }
+
+            lock (_gate)
+            {
+                if (_windowToApps.TryGetValue(hwnd, out var appIds) && appIds.Count > 0)
+                {
+                    return new List<string>(appIds);
+                }
+            }
+
+            return Array.Empty<string>();
+        }
+
+        /// <summary>
+        /// Gets the workspace ID for a bound app, if any.
+        /// </summary>
+        public string GetWorkspaceIdForApp(string appId)
+        {
+            if (string.IsNullOrWhiteSpace(appId))
+            {
+                return null;
+            }
+
+            lock (_gate)
+            {
+                return _appToWorkspace.TryGetValue(appId, out var workspaceId) ? workspaceId : null;
             }
         }
 
@@ -208,6 +249,31 @@ namespace TopToolbar.Services.Workspaces
         }
 
         /// <summary>
+        /// Gets all currently bound window handles.
+        /// </summary>
+        public HashSet<IntPtr> GetAllBoundWindows()
+        {
+            lock (_gate)
+            {
+                var handles = new HashSet<IntPtr>();
+                foreach (var handle in _windowToApps.Keys)
+                {
+                    if (handle == IntPtr.Zero)
+                    {
+                        continue;
+                    }
+
+                    if (IsWindow(handle))
+                    {
+                        handles.Add(handle);
+                    }
+                }
+
+                return handles;
+            }
+        }
+
+        /// <summary>
         /// Removes the binding for an application.
         /// </summary>
         public void UnbindApp(string appId)
@@ -221,7 +287,7 @@ namespace TopToolbar.Services.Workspaces
             {
                 if (_appToWindow.TryGetValue(appId, out var hwnd))
                 {
-                    _windowToApp.Remove(hwnd);
+                    RemoveAppFromWindow(hwnd, appId);
                 }
 
                 _appToWindow.Remove(appId);
@@ -242,13 +308,16 @@ namespace TopToolbar.Services.Workspaces
 
             lock (_gate)
             {
-                if (_windowToApp.TryGetValue(hwnd, out var appId))
+                if (_windowToApps.TryGetValue(hwnd, out var appIds))
                 {
-                    _appToWindow.Remove(appId);
-                    _appToWorkspace.Remove(appId);
+                    foreach (var appId in appIds)
+                    {
+                        _appToWindow.Remove(appId);
+                        _appToWorkspace.Remove(appId);
+                    }
                 }
 
-                _windowToApp.Remove(hwnd);
+                _windowToApps.Remove(hwnd);
             }
         }
 
@@ -278,7 +347,7 @@ namespace TopToolbar.Services.Workspaces
                 {
                     if (_appToWindow.TryGetValue(appId, out var hwnd))
                     {
-                        _windowToApp.Remove(hwnd);
+                        RemoveAppFromWindow(hwnd, appId);
                     }
 
                     _appToWindow.Remove(appId);
@@ -295,8 +364,41 @@ namespace TopToolbar.Services.Workspaces
             lock (_gate)
             {
                 _appToWindow.Clear();
-                _windowToApp.Clear();
+                _windowToApps.Clear();
                 _appToWorkspace.Clear();
+            }
+        }
+
+        private void AddAppToWindow(IntPtr hwnd, string appId)
+        {
+            if (hwnd == IntPtr.Zero || string.IsNullOrWhiteSpace(appId))
+            {
+                return;
+            }
+
+            if (!_windowToApps.TryGetValue(hwnd, out var appIds))
+            {
+                appIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                _windowToApps[hwnd] = appIds;
+            }
+
+            appIds.Add(appId);
+        }
+
+        private void RemoveAppFromWindow(IntPtr hwnd, string appId)
+        {
+            if (hwnd == IntPtr.Zero || string.IsNullOrWhiteSpace(appId))
+            {
+                return;
+            }
+
+            if (_windowToApps.TryGetValue(hwnd, out var appIds))
+            {
+                appIds.Remove(appId);
+                if (appIds.Count == 0)
+                {
+                    _windowToApps.Remove(hwnd);
+                }
             }
         }
 

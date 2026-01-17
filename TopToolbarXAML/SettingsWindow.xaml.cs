@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using TopToolbar.Providers;
 using TopToolbar.Services;
 using TopToolbar.ViewModels;
 
@@ -15,6 +16,7 @@ namespace TopToolbar
     public sealed partial class SettingsWindow : WinUIEx.WindowEx, IDisposable
     {
         private readonly SettingsViewModel _vm;
+        private readonly ActionProviderRuntime _providerRuntime;
         private bool _isClosed;
         private bool _disposed;
         private FrameworkElement _appTitleBarCache;
@@ -22,10 +24,11 @@ namespace TopToolbar
 
         public SettingsViewModel ViewModel => _vm;
 
-        public SettingsWindow()
+        public SettingsWindow(ActionProviderRuntime providerRuntime = null)
         {
             InitializeComponent();
 
+            _providerRuntime = providerRuntime;
             _vm = new SettingsViewModel(new ToolbarConfigService());
             InitializeWindowStyling();
             LayoutRoot.DataContext = _vm;
