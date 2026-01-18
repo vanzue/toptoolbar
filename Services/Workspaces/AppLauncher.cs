@@ -41,6 +41,23 @@ namespace TopToolbar.Services.Workspaces
                 return AppWindowResult.Failed;
             }
 
+            // If command-line arguments are specified and we have a path, prefer Path launch
+            // because AUMID/PackageFullName activation APIs don't support passing arguments.
+            var hasCommandLineArgs = !string.IsNullOrWhiteSpace(app.CommandLineArguments);
+            var hasPath = !string.IsNullOrWhiteSpace(app.Path);
+
+            if (hasCommandLineArgs && hasPath)
+            {
+                AppLogger.LogInfo($"WorkspaceRuntime: app '{DescribeApp(app)}' has command-line arguments, using Path launch to respect them.");
+                return await LaunchWin32AppSimpleAsync(
+                    app,
+                    windowManager,
+                    windowWaitTimeout,
+                    windowPollInterval,
+                    knownHandles,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             // Priority: AUMID -> PackageFullName -> Path.
             if (!string.IsNullOrWhiteSpace(app.AppUserModelId))
             {
@@ -72,7 +89,7 @@ namespace TopToolbar.Services.Workspaces
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(app.Path))
+            if (hasPath)
             {
                 return await LaunchWin32AppSimpleAsync(
                     app,
@@ -305,7 +322,7 @@ namespace TopToolbar.Services.Workspaces
                 FileName = expandedPath,
                 Arguments = string.IsNullOrWhiteSpace(app.CommandLineArguments) ? string.Empty : app.CommandLineArguments,
                 UseShellExecute = useShellExecute,
-                WorkingDirectory = DetermineWorkingDirectory(expandedPath, useShellExecute),
+                WorkingDirectory = DetermineWorkingDirectory(expandedPath, useShellExecute, app.WorkingDirectory),
             };
 
             if (app.IsElevated && app.CanLaunchElevated)
@@ -365,8 +382,17 @@ namespace TopToolbar.Services.Workspaces
             }
         }
 
-        private static string DetermineWorkingDirectory(string path, bool useShellExecute)
+        private static string DetermineWorkingDirectory(
+            string path,
+            bool useShellExecute,
+            string configuredWorkingDirectory)
         {
+            var overrideDirectory = ResolveWorkingDirectory(configuredWorkingDirectory);
+            if (!string.IsNullOrWhiteSpace(overrideDirectory))
+            {
+                return overrideDirectory;
+            }
+
             if (useShellExecute)
             {
                 return AppContext.BaseDirectory;
@@ -385,6 +411,29 @@ namespace TopToolbar.Services.Workspaces
             }
 
             return AppContext.BaseDirectory;
+        }
+
+        private static string ResolveWorkingDirectory(string configuredWorkingDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(configuredWorkingDirectory))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                var expanded = ExpandPath(configuredWorkingDirectory);
+                if (string.IsNullOrWhiteSpace(expanded))
+                {
+                    return string.Empty;
+                }
+
+                return Directory.Exists(expanded) ? expanded : string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
 
         private static string DescribeApp(ApplicationDefinition app)

@@ -6,6 +6,8 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:winuiex="using:WinUIEx"
     xmlns:local="using:TopToolbar.Models"
+    xmlns:vm="using:TopToolbar.ViewModels"
+    xmlns:workspaces="using:TopToolbar.Services.Workspaces"
     xmlns:tkcontrols="using:CommunityToolkit.WinUI.Controls"
     xmlns:conv="using:TopToolbar.Converters"
     mc:Ignorable="d"
@@ -265,7 +267,7 @@
                                       Tapped="OnGeneralItemTapped"
                                       Style="{StaticResource ToolbarListItemStyle}"
                                       Padding="4,6">
-                            <Grid ColumnSpacing="6" Padding="4,0,4,0">
+                            <Grid ColumnSpacing="8" Padding="6,0,4,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -323,8 +325,8 @@
                                   ItemContainerStyle="{StaticResource ToolbarListItemStyle}">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="local:ButtonGroup">
-                                    <Grid ColumnSpacing="6"
-                                            Padding="4,0,4,0">
+                                    <Grid ColumnSpacing="8"
+                                            Padding="6,0,4,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
@@ -332,7 +334,8 @@
                                         <TextBlock x:Name="NameText"
                                                 Text="{x:Bind Name, Mode=OneWay}"
                                                 FontWeight="Normal"
-                                                VerticalAlignment="Center"/>
+                                                VerticalAlignment="Center"
+                                                TextTrimming="CharacterEllipsis"/>
                                         <TextBox x:Name="NameEdit"
                                                 Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                 Visibility="Collapsed"
@@ -356,6 +359,76 @@
                                                     Glyph="&#xE70F;"
                                                     FontSize="14"/>
                                         </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                            <ListView.Resources>
+                                <Style TargetType="ListViewItem"
+                                        BasedOn="{StaticResource ToolbarListItemStyle}">
+                                    <Setter Property="Padding"
+                                            Value="4,6"/>
+                                </Style>
+                            </ListView.Resources>
+                        </ListView>
+
+                        <!-- Workspaces header with actions -->
+                        <Grid Margin="0,12,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal"
+                                    VerticalAlignment="Center"
+                                    Spacing="8">
+                                <TextBlock Text="Workspaces"
+                                        FontSize="15"
+                                        FontWeight="SemiBold"/>
+                                <Rectangle Width="1"
+                                        Height="16"
+                                        Fill="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        Opacity="0.35"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal"
+                                    Grid.Column="1"
+                                    Spacing="4">
+                                <Button Style="{StaticResource AccentButtonStyle}"
+                                        MinWidth="0"
+                                        Padding="10,4"
+                                        Content="Add"
+                                        Click="OnAddWorkspace"/>
+                                <Button MinWidth="0"
+                                        Padding="10,4"
+                                        Content="Remove"
+                                        Click="OnRemoveWorkspace"
+                                        IsEnabled="{x:Bind ViewModel.HasSelectedWorkspace, Mode=OneWay}"/>
+                            </StackPanel>
+                        </Grid>
+                        <ListView x:Name="WorkspacesList"
+                                  ItemsSource="{x:Bind ViewModel.WorkspaceButtons, Mode=OneWay}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedWorkspace, Mode=TwoWay}"
+                                  SelectionMode="Single"
+                                  BorderThickness="0"
+                                  IsItemClickEnabled="True"
+                                  MinHeight="120"
+                                  ItemContainerStyle="{StaticResource ToolbarListItemStyle}">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:WorkspaceButtonViewModel">
+                                    <Grid ColumnSpacing="8"
+                                            Padding="6,0,4,0"
+                                            Opacity="{x:Bind DisplayOpacity}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon FontFamily="Segoe MDL2 Assets"
+                                                Glyph="{x:Bind IconGlyph}"
+                                                FontSize="14"
+                                                VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1"
+                                                Text="{x:Bind Name, Mode=OneWay}"
+                                                FontWeight="Normal"
+                                                VerticalAlignment="Center"
+                                                TextTrimming="CharacterEllipsis"/>
                                     </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
@@ -513,6 +586,99 @@
                                     </tkcontrols:SettingsExpander>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- Workspace settings (only when a workspace is selected) -->
+                        <StackPanel Spacing="16" Visibility="{x:Bind ViewModel.IsWorkspaceSelected, Mode=OneWay}">
+                            <TextBlock Text="Workspace"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"/>
+
+                            <tkcontrols:SettingsCard Header="Name">
+                                <TextBox Text="{x:Bind ViewModel.SelectedWorkspace.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        Style="{StaticResource StandardTextBoxStyle}"/>
+                            </tkcontrols:SettingsCard>
+
+                            <tkcontrols:SettingsCard Header="Description">
+                                <TextBox Text="{x:Bind ViewModel.SelectedWorkspace.Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        Style="{StaticResource StandardTextBoxStyle}"/>
+                            </tkcontrols:SettingsCard>
+
+                            <tkcontrols:SettingsCard Header="Enabled">
+                                <ToggleSwitch IsOn="{x:Bind ViewModel.SelectedWorkspace.Enabled, Mode=TwoWay}"/>
+                            </tkcontrols:SettingsCard>
+
+                            <!-- Applications header with add -->
+                            <Grid ColumnSpacing="10"
+                                    VerticalAlignment="Center"
+                                    Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Applications"
+                                        FontSize="15"
+                                        FontWeight="SemiBold"
+                                        VerticalAlignment="Center"
+                                        Grid.Column="0"/>
+                                <Rectangle Width="1"
+                                        Height="18"
+                                        Fill="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        Opacity="0.35"
+                                        VerticalAlignment="Center"
+                                        Grid.Column="1"/>
+                                <StackPanel Orientation="Horizontal"
+                                        Spacing="6"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Grid.Column="2">
+                                    <Button Content="Add app"
+                                            Click="OnAddWorkspaceApp"
+                                            VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="No applications yet."
+                                       Opacity="0.65"
+                                       Visibility="{x:Bind ViewModel.SelectedWorkspace.IsEmpty, Mode=OneWay}"/>
+
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.SelectedWorkspace.Apps, Mode=OneWay}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="workspaces:ApplicationDefinition">
+                                        <tkcontrols:SettingsExpander IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
+                                                                     Header="{x:Bind DisplayName, Mode=OneWay}"
+                                                                     Description="{x:Bind Path, Mode=OneWay}">
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <Button Click="OnRemoveWorkspaceApp"
+                                                        ToolTipService.ToolTip="Remove"
+                                                        Background="Transparent"
+                                                        BorderBrush="Transparent">
+                                                    <FontIcon Glyph="&#xE74D;" FontSize="16" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                                </Button>
+                                            </StackPanel>
+                                            <tkcontrols:SettingsExpander.Items>
+                                                <tkcontrols:SettingsCard Header="Name">
+                                                    <TextBox Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                            Style="{StaticResource StandardTextBoxStyle}"/>
+                                                </tkcontrols:SettingsCard>
+                                                <tkcontrols:SettingsCard Header="Path">
+                                                    <TextBox Text="{x:Bind Path, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                            Style="{StaticResource StandardTextBoxStyle}"/>
+                                                </tkcontrols:SettingsCard>
+                                                <tkcontrols:SettingsCard Header="Command line">
+                                                    <TextBox Text="{x:Bind CommandLineArguments, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                            Style="{StaticResource StandardTextBoxStyle}"/>
+                                                </tkcontrols:SettingsCard>
+                                                <tkcontrols:SettingsCard Header="Working directory">
+                                                    <TextBox Text="{x:Bind WorkingDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                            Style="{StaticResource StandardTextBoxStyle}"/>
+                                                </tkcontrols:SettingsCard>
+                                            </tkcontrols:SettingsExpander.Items>
+                                        </tkcontrols:SettingsExpander>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
                     </StackPanel>

@@ -368,7 +368,7 @@ namespace TopToolbar.Providers
                         Id = BuildButtonIdInternal(ws.Id),
                         WorkspaceId = ws.Id,
                         Name = string.IsNullOrWhiteSpace(ws.Name) ? ws.Id : ws.Name,
-                        Description = ws.Id,
+                        Description = string.Empty,
                         Enabled = true,
                         Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F4" },
                     })
@@ -400,7 +400,7 @@ namespace TopToolbar.Providers
 
                 var description = !string.IsNullOrWhiteSpace(buttonConfig.Description)
                     ? buttonConfig.Description
-                    : workspaceId;
+                    : string.Empty;
 
                 var button = new ToolbarButton
                 {

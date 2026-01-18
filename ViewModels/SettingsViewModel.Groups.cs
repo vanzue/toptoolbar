@@ -23,17 +23,25 @@ namespace TopToolbar.ViewModels
             get => _selectedGroup;
             set
             {
-                SetProperty(ref _selectedGroup, value);
-                OnPropertyChanged(nameof(HasSelectedGroup));
-                OnPropertyChanged(nameof(HasNoSelectedGroup));
-                if (value != null)
+                if (!ReferenceEquals(_selectedGroup, value))
                 {
-                    // Deselect General when a group is selected
-                    _isGeneralSelected = false;
-                    OnPropertyChanged(nameof(IsGeneralSelected));
+                    SetProperty(ref _selectedGroup, value);
+                    OnPropertyChanged(nameof(HasSelectedGroup));
+                    OnPropertyChanged(nameof(HasNoSelectedGroup));
+                    if (value != null)
+                    {
+                        // Deselect General when a group is selected
+                        _isGeneralSelected = false;
+                        OnPropertyChanged(nameof(IsGeneralSelected));
+                        if (SelectedWorkspace != null)
+                        {
+                            SelectedWorkspace = null;
+                        }
+                    }
+                    // Must update IsGroupSelected after IsGeneralSelected is updated
+                    OnPropertyChanged(nameof(IsGroupSelected));
+                    OnPropertyChanged(nameof(IsWorkspaceSelected));
                 }
-                // Must update IsGroupSelected after IsGeneralSelected is updated
-                OnPropertyChanged(nameof(IsGroupSelected));
             }
         }
 
@@ -67,10 +75,12 @@ namespace TopToolbar.ViewModels
                     _isGeneralSelected = value;
                     OnPropertyChanged(nameof(IsGeneralSelected));
                     OnPropertyChanged(nameof(IsGroupSelected));
+                    OnPropertyChanged(nameof(IsWorkspaceSelected));
                     if (value)
                     {
                         // Deselect group when General is selected
                         SelectedGroup = null;
+                        SelectedWorkspace = null;
                     }
                 }
             }

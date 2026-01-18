@@ -31,8 +31,34 @@ namespace TopToolbar.ViewModels
         public WorkspaceButtonViewModel SelectedWorkspace
         {
             get => _selectedWorkspace;
-            set => SetProperty(ref _selectedWorkspace, value);
+            set
+            {
+                if (!ReferenceEquals(_selectedWorkspace, value))
+                {
+                    _selectedWorkspace = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(HasSelectedWorkspace));
+                    OnPropertyChanged(nameof(IsWorkspaceSelected));
+
+                    if (value != null)
+                    {
+                        if (IsGeneralSelected)
+                        {
+                            IsGeneralSelected = false;
+                        }
+
+                        if (SelectedGroup != null)
+                        {
+                            SelectedGroup = null;
+                        }
+                    }
+                }
+            }
         }
+
+        public bool HasSelectedWorkspace => SelectedWorkspace != null;
+
+        public bool IsWorkspaceSelected => !IsGeneralSelected && SelectedWorkspace != null && SelectedGroup == null;
 
         private void WorkspaceButtons_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
@@ -64,6 +90,8 @@ namespace TopToolbar.ViewModels
             WorkspaceProviderConfig config,
             System.Collections.Generic.IReadOnlyList<WorkspaceDefinition> definitions)
         {
+            var selectedId = SelectedWorkspace?.WorkspaceId;
+
             foreach (var existing in WorkspaceButtons.ToList())
             {
                 UnhookWorkspaceButton(existing);
@@ -95,7 +123,7 @@ namespace TopToolbar.ViewModels
                         Id = BuildWorkspaceButtonId(definition.Id),
                         WorkspaceId = definition.Id,
                         Name = string.IsNullOrWhiteSpace(definition.Name) ? definition.Id : definition.Name,
-                        Description = definition.Id,
+                        Description = string.Empty,
                         Enabled = true,
                         Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F4" },
                     })
@@ -134,7 +162,10 @@ namespace TopToolbar.ViewModels
                 WorkspaceButtons.Add(viewModel);
             }
 
-            SelectedWorkspace = WorkspaceButtons.FirstOrDefault();
+            SelectedWorkspace = !string.IsNullOrWhiteSpace(selectedId)
+                ? WorkspaceButtons.FirstOrDefault(ws =>
+                    string.Equals(ws.WorkspaceId, selectedId, StringComparison.OrdinalIgnoreCase))
+                : null;
         }
 
         private async Task SaveWorkspaceConfigAsync()
@@ -194,6 +225,11 @@ namespace TopToolbar.ViewModels
             }
 
             workspace.PropertyChanged += Workspace_PropertyChanged;
+            workspace.Apps.CollectionChanged += WorkspaceApps_CollectionChanged;
+            foreach (var app in workspace.Apps)
+            {
+                HookWorkspaceApp(app);
+            }
             workspace.Definition.Applications = workspace.Apps.ToList();
         }
 
@@ -205,11 +241,78 @@ namespace TopToolbar.ViewModels
             }
 
             workspace.PropertyChanged -= Workspace_PropertyChanged;
+            workspace.Apps.CollectionChanged -= WorkspaceApps_CollectionChanged;
+            foreach (var app in workspace.Apps)
+            {
+                UnhookWorkspaceApp(app);
+            }
         }
 
         private void Workspace_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (_suppressWorkspaceSave)
+            {
+                return;
+            }
+
+            ScheduleSave();
+        }
+
+        private void WorkspaceApps_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.NewItems != null)
+            {
+                foreach (var app in e.NewItems.Cast<ApplicationDefinition>())
+                {
+                    HookWorkspaceApp(app);
+                }
+            }
+
+            if (e.OldItems != null)
+            {
+                foreach (var app in e.OldItems.Cast<ApplicationDefinition>())
+                {
+                    UnhookWorkspaceApp(app);
+                }
+            }
+
+            if (_suppressWorkspaceSave)
+            {
+                return;
+            }
+
+            ScheduleSave();
+        }
+
+        private void HookWorkspaceApp(ApplicationDefinition app)
+        {
+            if (app == null)
+            {
+                return;
+            }
+
+            app.PropertyChanged += WorkspaceApp_PropertyChanged;
+        }
+
+        private void UnhookWorkspaceApp(ApplicationDefinition app)
+        {
+            if (app == null)
+            {
+                return;
+            }
+
+            app.PropertyChanged -= WorkspaceApp_PropertyChanged;
+        }
+
+        private void WorkspaceApp_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (_suppressWorkspaceSave)
+            {
+                return;
+            }
+
+            if (string.Equals(e.PropertyName, nameof(ApplicationDefinition.IsExpanded), StringComparison.Ordinal)
+                || string.Equals(e.PropertyName, nameof(ApplicationDefinition.DisplayName), StringComparison.Ordinal))
             {
                 return;
             }
@@ -236,7 +339,7 @@ namespace TopToolbar.ViewModels
                 Id = BuildWorkspaceButtonId(id),
                 WorkspaceId = id,
                 Name = displayName,
-                Description = id,
+                Description = string.Empty,
                 Enabled = true,
                 SortOrder = WorkspaceButtons.Count + 1,
                 Icon = new ProviderIcon { Type = ProviderIconType.Glyph, Glyph = "\uE7F4" },
@@ -247,6 +350,25 @@ namespace TopToolbar.ViewModels
             SelectedWorkspace = workspace;
             ScheduleSave();
             return workspace;
+        }
+
+        public ApplicationDefinition AddWorkspaceApp(WorkspaceButtonViewModel workspace)
+        {
+            if (workspace == null)
+            {
+                return null;
+            }
+
+            var app = new ApplicationDefinition
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = "New application",
+                IsExpanded = true,
+            };
+
+            workspace.Apps.Add(app);
+            ScheduleSave();
+            return app;
         }
 
         public void RemoveWorkspace(WorkspaceButtonViewModel workspace)

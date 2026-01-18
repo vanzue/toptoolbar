@@ -82,7 +82,17 @@ namespace TopToolbar
             _vm.ResetWorkspaceIcon(workspace);
         }
 
-        private void OnRemoveWorkspaceApp(object sender, RoutedEventArgs e)
+        private void OnAddWorkspaceApp(object sender, RoutedEventArgs e)
+        {
+            if (_vm.SelectedWorkspace == null)
+            {
+                return;
+            }
+
+            _vm.AddWorkspaceApp(_vm.SelectedWorkspace);
+        }
+
+        private async void OnRemoveWorkspaceApp(object sender, RoutedEventArgs e)
         {
             if (_vm.SelectedWorkspace == null)
             {
@@ -92,6 +102,7 @@ namespace TopToolbar
             if ((sender as FrameworkElement)?.DataContext is ApplicationDefinition app)
             {
                 _vm.RemoveWorkspaceApp(_vm.SelectedWorkspace, app);
+                await _vm.SaveAsync();
             }
         }
 

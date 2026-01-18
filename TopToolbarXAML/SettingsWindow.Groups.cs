@@ -68,6 +68,7 @@ namespace TopToolbar
             _vm.IsGeneralSelected = true;
             // Deselect any group in the ListView
             GroupsList.SelectedItem = null;
+            WorkspacesList.SelectedItem = null;
         }
 
         // Inline rename handlers for groups list
