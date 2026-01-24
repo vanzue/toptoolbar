@@ -64,9 +64,18 @@ namespace TopToolbar.Services.Workspaces
                     }
                     else if (WorkspaceWindowMatcher.IsMatch(windowInfo, app))
                     {
-                        sw.Stop();
-                        LogPerf($"WorkspaceRuntime: [{appLabel}] TryAssignExisting - found cached window handle={boundHandle} in {sw.ElapsedMilliseconds} ms");
-                        return new EnsureAppResult(true, app, boundHandle, false);
+                        if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(boundHandle, out var isOnCurrentDesktop)
+                            && !isOnCurrentDesktop)
+                        {
+                            _managedWindows.UnbindApp(app.Id);
+                            LogPerf($"WorkspaceRuntime: [{appLabel}] TryAssignExisting - cached window handle={boundHandle} on another virtual desktop, unbound");
+                        }
+                        else
+                        {
+                            sw.Stop();
+                            LogPerf($"WorkspaceRuntime: [{appLabel}] TryAssignExisting - found cached window handle={boundHandle} in {sw.ElapsedMilliseconds} ms");
+                            return new EnsureAppResult(true, app, boundHandle, false);
+                        }
                     }
                     else
                     {
@@ -101,6 +110,13 @@ namespace TopToolbar.Services.Workspaces
 
                     if (WorkspaceWindowMatcher.IsMatch(window, app))
                     {
+                        if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop)
+                            && !isOnCurrentDesktop)
+                        {
+                            LogPerf($"WorkspaceRuntime: [{appLabel}] TryAssignExisting - candidate window handle={window.Handle} on another virtual desktop");
+                            continue;
+                        }
+
                         if (_managedWindows.TryBindWindow(workspaceId, app.Id, window.Handle))
                         {
                             sw.Stop();
@@ -138,6 +154,13 @@ namespace TopToolbar.Services.Workspaces
                         if (!string.IsNullOrWhiteSpace(window.Title)
                             && window.Title.Equals(app.Title, StringComparison.OrdinalIgnoreCase))
                         {
+                            if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop)
+                                && !isOnCurrentDesktop)
+                            {
+                                LogPerf($"WorkspaceRuntime: [{appLabel}] TryAssignExisting - title match window handle={window.Handle} on another virtual desktop");
+                                continue;
+                            }
+
                             if (_managedWindows.TryBindWindow(workspaceId, app.Id, window.Handle))
                             {
                                 sw.Stop();

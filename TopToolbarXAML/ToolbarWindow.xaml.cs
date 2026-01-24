@@ -4,12 +4,11 @@
 
 using System;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using TopToolbar.Actions;
-using TopToolbar.Logging;
 using TopToolbar.Models;
 using TopToolbar.Providers;
 using TopToolbar.Services;
@@ -29,9 +28,9 @@ namespace TopToolbar
         private readonly ToolbarActionExecutor _actionExecutor;
         private readonly BuiltinProvider _builtinProvider;
         private readonly ToolbarViewModel _vm;
-        private readonly ToolbarItemsViewModel _itemsViewModel;
 
         private readonly TopToolbar.Stores.ToolbarStore _store = new();
+        public ToolbarItemsViewModel ItemsViewModel { get; }
         private Timer _monitorTimer;
         private Timer _configWatcherDebounce;
         private bool _isVisible;
@@ -41,12 +40,11 @@ namespace TopToolbar
         private FileSystemWatcher _configWatcher;
         private IntPtr _oldWndProc;
         private DpiWndProcDelegate _newWndProc;
+        private SettingsWindow _settingsWindow;
 
         private bool _snapshotInProgress;
 
         private delegate IntPtr DpiWndProcDelegate(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
-
-        public ToolbarItemsViewModel ItemsViewModel => _itemsViewModel;
 
         public ToolbarWindow()
         {
@@ -54,12 +52,13 @@ namespace TopToolbar
             _contextFactory = new ActionContextFactory();
             _providerRuntime = new ActionProviderRuntime();
             _providerService = new ActionProviderService(_providerRuntime);
+            _actionExecutor = new ToolbarActionExecutor(_providerService, _contextFactory, DispatcherQueue);
             _builtinProvider = new BuiltinProvider();
             _vm = new ToolbarViewModel(_configService, _providerService, _contextFactory);
-            _itemsViewModel = new ToolbarItemsViewModel(_store);
-            _itemsViewModel.LayoutChanged += (_, __) =>
+            ItemsViewModel = new ToolbarItemsViewModel(_store);
+            ItemsViewModel.LayoutChanged += (_, __) =>
             {
-                void Apply()
+                if (DispatcherQueue == null || DispatcherQueue.HasThreadAccess)
                 {
                     ResizeToContent();
                     if (!_isVisible)
@@ -67,18 +66,20 @@ namespace TopToolbar
                         PositionAtTopCenter();
                     }
                 }
-
-                if (DispatcherQueue == null || DispatcherQueue.HasThreadAccess)
-                {
-                    Apply();
-                }
                 else
                 {
-                    _ = DispatcherQueue.TryEnqueue(Apply);
+                    _ = DispatcherQueue.TryEnqueue(() =>
+                    {
+                        ResizeToContent();
+                        if (!_isVisible)
+                        {
+                            PositionAtTopCenter();
+                        }
+                    });
                 }
             };
+
             InitializeComponent();
-            _actionExecutor = new ToolbarActionExecutor(_providerService, _contextFactory, DispatcherQueue);
             EnsurePerMonitorV2();
             RegisterProviders();
 
@@ -135,13 +136,9 @@ namespace TopToolbar
                         }
                     }
 
-                    if (DispatcherQueue == null || DispatcherQueue.HasThreadAccess)
+                    if (!DispatcherQueue.TryEnqueue(ApplyStore))
                     {
                         ApplyStore();
-                    }
-                    else
-                    {
-                        _ = DispatcherQueue.TryEnqueue(ApplyStore);
                     }
                 }
                 catch (Exception)
@@ -174,24 +171,46 @@ namespace TopToolbar
                 await RefreshWorkspaceGroupAsync();
 
                 // Ensure UI-thread access for XAML object tree
-                if (DispatcherQueue == null || DispatcherQueue.HasThreadAccess)
+                DispatcherQueue.TryEnqueue(() =>
                 {
                     SyncStaticGroupsIntoStore();
                     ResizeToContent();
                     PositionAtTopCenter();
                     _builtConfigOnce = true;
-                }
-                else
-                {
-                    _ = DispatcherQueue.TryEnqueue(() =>
-                    {
-                        SyncStaticGroupsIntoStore();
-                        ResizeToContent();
-                        PositionAtTopCenter();
-                        _builtConfigOnce = true;
-                    });
-                }
+                });
             };
+        }
+
+        public void Dispose()
+        {
+            _monitorTimer?.Stop();
+            _monitorTimer?.Dispose();
+            _configWatcherDebounce?.Stop();
+            _configWatcherDebounce?.Dispose();
+            if (_configWatcher != null)
+            {
+                _configWatcher.EnableRaisingEvents = false;
+                _configWatcher.Dispose();
+            }
+
+            try
+            {
+                ItemsViewModel?.Dispose();
+            }
+            catch
+            {
+            }
+
+            // Dispose the built-in provider which handles all provider disposals
+            try
+            {
+                _builtinProvider?.Dispose();
+            }
+            catch (Exception)
+            {
+            }
+
+            GC.SuppressFinalize(this);
         }
 
         private void ToolbarContainer_Loaded(object sender, RoutedEventArgs e)
@@ -214,151 +233,52 @@ namespace TopToolbar
 
         private async void OnToolbarButtonClick(object sender, RoutedEventArgs e)
         {
-            if (sender is not Button button || button.Tag is not ToolbarButtonItem item)
-            {
-                return;
-            }
-
-            if (item.Button.IsExecuting)
-            {
-                return;
-            }
-
-            try
-            {
-                await _actionExecutor.ExecuteAsync(item.Group, item.Button);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                item.Button.StatusMessage = ex.Message;
-            }
-        }
-
-        private void OnToolbarButtonRightTapped(object sender, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs e)
-        {
-            e.Handled = true;
-
-            if (sender is not FrameworkElement element || element.Tag is not ToolbarButtonItem item)
-            {
-                return;
-            }
-
-            var flyout = new MenuFlyout();
-            var deleteItem = new MenuFlyoutItem
-            {
-                Text = "Remove Button",
-                Icon = new FontIcon { Glyph = "\uE74D" },
-            };
-
-            deleteItem.Click += async (_, __) =>
+            if (sender is FrameworkElement fe && fe.Tag is ToolbarButtonItem item)
             {
                 try
                 {
-                    if (item.Button.Action?.Type == ToolbarActionType.Provider &&
-                        string.Equals(item.Button.Action.ProviderId, "WorkspaceProvider", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string workspaceId = null;
-                        if (!string.IsNullOrEmpty(item.Button.Id) &&
-                            item.Button.Id.StartsWith("workspace::", StringComparison.OrdinalIgnoreCase))
-                        {
-                            workspaceId = item.Button.Id.Substring("workspace::".Length);
-                        }
-                        else if (!string.IsNullOrEmpty(item.Button.Action.ProviderActionId) &&
-                                 item.Button.Action.ProviderActionId.StartsWith("workspace::", StringComparison.OrdinalIgnoreCase))
-                        {
-                            workspaceId = item.Button.Action.ProviderActionId.Substring("workspace::".Length);
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(workspaceId))
-                        {
-                            var definitionStore = new Services.Workspaces.WorkspaceDefinitionStore();
-                            var buttonStore = new Services.Workspaces.WorkspaceButtonStore();
-                            var deleted = await definitionStore.DeleteWorkspaceAsync(workspaceId, CancellationToken.None);
-
-                            if (deleted)
-                            {
-                                _ = await buttonStore.RemoveWorkspaceButtonAsync(workspaceId, CancellationToken.None);
-                                AppLogger.LogInfo($"Deleted workspace '{workspaceId}'");
-                                await _vm.LoadAsync(DispatcherQueue);
-                                await RefreshWorkspaceGroupAsync();
-                            }
-
-                            return;
-                        }
-                    }
-
-                    var vmGroup = _vm.Groups.FirstOrDefault(g =>
-                        string.Equals(g.Id, item.Group.Id, StringComparison.OrdinalIgnoreCase));
-
-                    if (vmGroup != null)
-                    {
-                        vmGroup.Buttons.Remove(item.Button);
-                        await _vm.SaveAsync();
-                        SyncStaticGroupsIntoStore();
-                    }
+                    await _actionExecutor.ExecuteAsync(item.Group, item.Button, CancellationToken.None)
+                        .ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                catch
                 {
-                    AppLogger.LogError($"Failed to delete button '{item.Button?.Name}': {ex.Message}");
                 }
-            };
+            }
+        }
 
-            flyout.Items.Add(deleteItem);
-            flyout.ShowAt(element, e.GetPosition(element));
+        private void OnToolbarButtonRightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            OpenSettingsWindow();
         }
 
         private async void OnSnapshotClick(object sender, RoutedEventArgs e)
         {
-            await HandleSnapshotButtonClickAsync(sender as Button);
+            if (sender is Button btn)
+            {
+                await HandleSnapshotButtonClickAsync(btn).ConfigureAwait(true);
+            }
         }
 
         private void OnSettingsClick(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                var win = new SettingsWindow(_providerRuntime);
-                win.AppWindow.Move(new Windows.Graphics.PointInt32(this.AppWindow.Position.X + 50, this.AppWindow.Position.Y + 60));
-                win.Activate();
-            }
-            catch (Exception ex)
-            {
-                AppLogger.LogError("Open SettingsWindow failed", ex);
-            }
+            OpenSettingsWindow();
         }
 
-        public void Dispose()
+        private void OpenSettingsWindow()
         {
-            _monitorTimer?.Stop();
-            _monitorTimer?.Dispose();
-            _configWatcherDebounce?.Stop();
-            _configWatcherDebounce?.Dispose();
-            if (_configWatcher != null)
+            if (_settingsWindow != null)
             {
-                _configWatcher.EnableRaisingEvents = false;
-                _configWatcher.Dispose();
+                _settingsWindow.Activate();
+                return;
             }
 
-            try
+            _settingsWindow = new SettingsWindow(_providerRuntime);
+            _settingsWindow.Closed += (_, __) =>
             {
-                _itemsViewModel?.Dispose();
-            }
-            catch
-            {
-            }
-
-            // Dispose the built-in provider which handles all provider disposals
-            try
-            {
-                _builtinProvider?.Dispose();
-            }
-            catch (Exception)
-            {
-            }
-
-            GC.SuppressFinalize(this);
+                _settingsWindow = null;
+            };
+            _settingsWindow.Activate();
         }
     }
 }

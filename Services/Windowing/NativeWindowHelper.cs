@@ -12,6 +12,19 @@ namespace TopToolbar.Services.Windowing
 {
     internal static partial class NativeWindowHelper
     {
+        private static readonly Lazy<IVirtualDesktopManager> VirtualDesktopManagerInstance = new(
+            () =>
+            {
+                try
+                {
+                    return (IVirtualDesktopManager)new VirtualDesktopManager();
+                }
+                catch
+                {
+                    return null;
+                }
+            });
+
         public static IReadOnlyList<IntPtr> EnumerateProcessWindows(int processId)
         {
             if (processId <= 0)
@@ -335,6 +348,34 @@ namespace TopToolbar.Services.Windowing
             }
 
             return string.Empty;
+        }
+
+        public static bool TryIsWindowOnCurrentVirtualDesktop(
+            IntPtr hwnd,
+            out bool isOnCurrentDesktop)
+        {
+            isOnCurrentDesktop = true;
+
+            if (hwnd == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                var manager = VirtualDesktopManagerInstance.Value;
+                if (manager == null)
+                {
+                    return false;
+                }
+
+                var hr = manager.IsWindowOnCurrentVirtualDesktop(hwnd, out isOnCurrentDesktop);
+                return hr == 0;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }
