@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableComHosting>true</EnableComHosting>
+    <AssemblyName>TopToolbar.ContextMenu</AssemblyName>
+    <RootNamespace>TopToolbar.ContextMenu</RootNamespace>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>

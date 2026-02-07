@@ -25,7 +25,11 @@
 
 ## Build
 - Build using **arm64**. Prefer:
-  - `dotnet build .\TopToolbar.slnx -c Debug -r win-arm64 -p:Platform=arm64`
+  - `dotnet build .\TopToolbar.slnx -c Debug -p:Platform=arm64`
+  - `dotnet build .\TopToolbar.slnx -c Release -p:Platform=arm64`
+  - For explicit RID build (project-only): `dotnet build .\TopToolbar.csproj -c Debug -r win-arm64 -p:Platform=arm64`
+  - For explicit RID Release (project-only): `dotnet build .\TopToolbar.csproj -c Release -r win-arm64 -p:Platform=arm64`
+  - Note: `.slnx` + `-r` is blocked by .NET SDK (`NETSDK1134`), so use `.csproj` when passing `-r`.
 - Before building, kill `TopToolbar.exe` if it is running.
 
 ## Design/behavior considerations
