@@ -24,6 +24,12 @@ namespace TopToolbar.ContextMenu
         {
             ppszIcon = IntPtr.Zero;
 
+            if (TryGetContextMenuIconPath(out var iconPath))
+            {
+                ppszIcon = Marshal.StringToCoTaskMemUni(iconPath);
+                return HResult.S_OK;
+            }
+
             if (!TryGetTopToolbarExecutablePath(out var executablePath))
             {
                 return HResult.E_NOTIMPL;
@@ -170,6 +176,33 @@ namespace TopToolbar.ContextMenu
                 };
 
                 _ = Process.Start(startInfo);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryGetContextMenuIconPath(out string iconPath)
+        {
+            iconPath = string.Empty;
+
+            try
+            {
+                var assemblyDirectory = Path.GetDirectoryName(typeof(PinToTopToolbarExplorerCommand).Assembly.Location);
+                if (string.IsNullOrWhiteSpace(assemblyDirectory))
+                {
+                    return false;
+                }
+
+                var candidate = Path.Combine(assemblyDirectory, "Assets", "Logos", "ContextMenuIcon.ico");
+                if (!File.Exists(candidate))
+                {
+                    return false;
+                }
+
+                iconPath = candidate;
                 return true;
             }
             catch

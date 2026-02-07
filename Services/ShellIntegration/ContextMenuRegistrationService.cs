@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.IO;
 using Microsoft.Win32;
 using TopToolbar.Logging;
 
@@ -63,7 +64,7 @@ namespace TopToolbar.Services.ShellIntegration
             }
 
             key.SetValue("MUIVerb", MenuText, RegistryValueKind.String);
-            key.SetValue("Icon", executablePath, RegistryValueKind.String);
+            key.SetValue("Icon", ResolveMenuIconPath(executablePath), RegistryValueKind.String);
             key.SetValue("Position", "Top", RegistryValueKind.String);
 
             using var command = key.CreateSubKey("command");
@@ -74,6 +75,27 @@ namespace TopToolbar.Services.ShellIntegration
 
             var commandLine = $"\"{executablePath}\" --pin \"%1\"";
             command.SetValue(string.Empty, commandLine, RegistryValueKind.String);
+        }
+
+        private static string ResolveMenuIconPath(string executablePath)
+        {
+            try
+            {
+                var executableDirectory = Path.GetDirectoryName(executablePath);
+                if (!string.IsNullOrWhiteSpace(executableDirectory))
+                {
+                    var iconPath = Path.Combine(executableDirectory, "Assets", "Logos", "ContextMenuIcon.ico");
+                    if (File.Exists(iconPath))
+                    {
+                        return iconPath;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return executablePath;
         }
     }
 }

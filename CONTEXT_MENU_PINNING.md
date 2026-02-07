@@ -21,6 +21,7 @@
   - COM `IExplorerCommand` implementation for modern Win11 context menu.
   - Extracts selected shell item file-system paths.
   - Launches `TopToolbar.exe --pin "<path>"` per item.
+  - Uses `Assets/Logos/ContextMenuIcon.ico` for the menu icon when available.
 - `Package.appxmanifest`
   - Declares COM server (`windows.comServer`) pointing to `TopToolbar.ContextMenu.comhost.dll`.
   - Declares `windows.fileExplorerContextMenus` for `*` (files, including `.exe`) and `Directory`.
