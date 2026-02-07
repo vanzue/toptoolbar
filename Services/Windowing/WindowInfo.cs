@@ -87,5 +87,32 @@ namespace TopToolbar.Services.Windowing
                 monitorId ?? string.Empty,
                 monitorIndex);
         }
+
+        public WindowInfo WithBounds(WindowBounds bounds, bool isVisible)
+        {
+            if (Bounds.Left == bounds.Left
+                && Bounds.Top == bounds.Top
+                && Bounds.Right == bounds.Right
+                && Bounds.Bottom == bounds.Bottom
+                && IsVisible == isVisible)
+            {
+                return this;
+            }
+
+            return new WindowInfo(
+                Handle,
+                ProcessId,
+                ProcessPath,
+                ProcessFileName,
+                ProcessName,
+                PackageFullName,
+                Title,
+                AppUserModelId,
+                isVisible,
+                bounds,
+                ClassName,
+                MonitorId,
+                MonitorIndex);
+        }
     }
 }

@@ -6,23 +6,32 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace TopToolbar.Services.Windowing
 {
     internal static partial class NativeWindowHelper
     {
-        public static void SetWindowPlacement(
+        public static async Task SetWindowPlacementAsync(
             IntPtr hwnd,
             WindowPlacement position,
             bool maximize,
             bool minimize,
-            bool waitForInputIdle = false
+            bool waitForInputIdle = false,
+            CancellationToken cancellationToken = default
         )
         {
-            if (hwnd == IntPtr.Zero || position.IsEmpty)
+            if (hwnd == IntPtr.Zero)
             {
-                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: skipped - hwnd={hwnd}, position={position.X},{position.Y},{position.Width},{position.Height}, isEmpty={position.IsEmpty}");
+                TopToolbar.Logging.AppLogger.LogInfo("SetWindowPlacement: skipped - hwnd is zero");
+                return;
+            }
+
+            var hasPlacement = !position.IsEmpty;
+            if (!hasPlacement && !maximize && !minimize)
+            {
+                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: skipped - hwnd={hwnd}, empty placement and no window state change requested");
                 return;
             }
 
@@ -31,27 +40,31 @@ namespace TopToolbar.Services.Windowing
                 WaitForWindowInputIdle(hwnd);
             }
 
-            if (!EnsureWindowVisible(hwnd))
+            if (!await EnsureWindowVisibleAsync(hwnd, cancellationToken).ConfigureAwait(false))
             {
                 TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: EnsureWindowVisible failed for hwnd={hwnd}");
                 return;
             }
 
-            var placementApplied = SetWindowPos(
-                hwnd,
-                IntPtr.Zero,
-                position.X,
-                position.Y,
-                position.Width,
-                position.Height,
-                SwpNoActivate | SwpNoZOrder
-            );
-
-            if (!placementApplied)
+            var placementApplied = true;
+            if (hasPlacement)
             {
-                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: SetWindowPos failed for hwnd={hwnd}, but will still try ShowWindow");
-                // Don't return here - still try to minimize/maximize even if position failed
-                // This can happen with elevated windows (UIPI)
+                placementApplied = SetWindowPos(
+                    hwnd,
+                    IntPtr.Zero,
+                    position.X,
+                    position.Y,
+                    position.Width,
+                    position.Height,
+                    SwpNoActivate | SwpNoZOrder
+                );
+
+                if (!placementApplied)
+                {
+                    TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: SetWindowPos failed for hwnd={hwnd}, but will still try ShowWindow");
+                    // Don't return here - still try to minimize/maximize even if position failed
+                    // This can happen with elevated windows (UIPI)
+                }
             }
 
             TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: hwnd={hwnd}, minimize={minimize}, maximize={maximize}");
@@ -69,14 +82,16 @@ namespace TopToolbar.Services.Windowing
             {
                 var result = ShowWindow(hwnd, SwShowNormal);
                 TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: ShowWindow(normal) result={result}");
-                if (placementApplied)
+                if (hasPlacement && placementApplied)
                 {
-                    VerifyWindowPlacementWithRetry(hwnd, position);
+                    await VerifyWindowPlacementWithRetryAsync(hwnd, position, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
 
-        private static bool EnsureWindowVisible(IntPtr hwnd)
+        private static async Task<bool> EnsureWindowVisibleAsync(
+            IntPtr hwnd,
+            CancellationToken cancellationToken)
         {
             if (hwnd == IntPtr.Zero || !IsWindow(hwnd))
             {
@@ -89,13 +104,13 @@ namespace TopToolbar.Services.Windowing
             }
 
             _ = ShowWindow(hwnd, SwShowNormal);
-            return WaitForWindowVisible(hwnd);
+            return await WaitForWindowVisibleAsync(hwnd, cancellationToken).ConfigureAwait(false);
         }
 
-        private static void VerifyWindowPlacementWithRetry(
+        private static async Task VerifyWindowPlacementWithRetryAsync(
             IntPtr hwnd,
-            WindowPlacement position
-        )
+            WindowPlacement position,
+            CancellationToken cancellationToken)
         {
             if (hwnd == IntPtr.Zero || position.IsEmpty)
             {
@@ -104,7 +119,7 @@ namespace TopToolbar.Services.Windowing
 
             for (var attempt = 0; attempt < WindowPlacementRetryAttempts; attempt++)
             {
-                Task.Delay(WindowPlacementRetryDelayMilliseconds).Wait();
+                await Task.Delay(WindowPlacementRetryDelayMilliseconds, cancellationToken).ConfigureAwait(false);
 
                 if (!IsWindow(hwnd))
                 {
@@ -145,7 +160,9 @@ namespace TopToolbar.Services.Windowing
                 && Math.Abs(bounds.Height - position.Height) <= WindowPlacementTolerancePixels;
         }
 
-        private static bool WaitForWindowVisible(IntPtr hwnd)
+        private static async Task<bool> WaitForWindowVisibleAsync(
+            IntPtr hwnd,
+            CancellationToken cancellationToken)
         {
             if (hwnd == IntPtr.Zero || !IsWindow(hwnd))
             {
@@ -160,6 +177,8 @@ namespace TopToolbar.Services.Windowing
             var stopwatch = Stopwatch.StartNew();
             while (stopwatch.ElapsedMilliseconds < WindowVisibilityTimeoutMilliseconds)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (!IsWindow(hwnd))
                 {
                     return false;
@@ -170,7 +189,7 @@ namespace TopToolbar.Services.Windowing
                     return true;
                 }
 
-                Task.Delay(WindowVisibilityPollMilliseconds).Wait();
+                await Task.Delay(WindowVisibilityPollMilliseconds, cancellationToken).ConfigureAwait(false);
             }
 
             return IsWindowVisible(hwnd);

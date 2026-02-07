@@ -127,6 +127,8 @@ namespace TopToolbar.Services.Workspaces
                 windows = windowManager.FindMatches(predicate);
             }
 
+            windows = FilterToCurrentDesktop(windows);
+
             if (knownHandles == null || knownHandles.Count == 0)
             {
                 return windows;
@@ -143,6 +145,46 @@ namespace TopToolbar.Services.Workspaces
             }
 
             return filtered;
+        }
+
+        private static IReadOnlyList<WindowInfo> FilterToCurrentDesktop(IReadOnlyList<WindowInfo> windows)
+        {
+            if (windows == null || windows.Count == 0)
+            {
+                return Array.Empty<WindowInfo>();
+            }
+
+            var filtered = new List<WindowInfo>(windows.Count);
+            foreach (var window in windows)
+            {
+                if (IsWindowOnCurrentDesktop(window))
+                {
+                    filtered.Add(window);
+                }
+            }
+
+            return filtered;
+        }
+
+        private static bool IsWindowOnCurrentDesktop(WindowInfo window)
+        {
+            if (window == null || window.Handle == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            if (NativeWindowHelper.IsWindowCloaked(window.Handle))
+            {
+                return false;
+            }
+
+            if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop)
+                && !isOnCurrentDesktop)
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private static async Task<AppWindowResult> LaunchByAppUserModelIdSimpleAsync(
@@ -497,4 +539,3 @@ namespace TopToolbar.Services.Workspaces
         }
     }
 }
-

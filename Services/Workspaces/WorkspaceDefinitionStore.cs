@@ -9,16 +9,34 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using TopToolbar.Logging;
 using TopToolbar.Models.Providers;
 using TopToolbar.Services.Providers;
+using TopToolbar.Services.Storage;
 using TopToolbar.Serialization;
 
 namespace TopToolbar.Services.Workspaces
 {
     internal sealed class WorkspaceDefinitionStore
     {
+        private const int SaveRetryCount = 6;
+        private const int SaveRetryDelayMilliseconds = 60;
         private readonly string _filePath;
         private readonly WorkspaceProviderConfigStore _configStore;
+
+        private readonly struct DocumentSnapshot
+        {
+            public DocumentSnapshot(WorkspaceDocument document, long versionTicks, bool migratedFromLegacy)
+            {
+                Document = document ?? new WorkspaceDocument();
+                VersionTicks = versionTicks;
+                MigratedFromLegacy = migratedFromLegacy;
+            }
+
+            public WorkspaceDocument Document { get; }
+            public long VersionTicks { get; }
+            public bool MigratedFromLegacy { get; }
+        }
 
         public WorkspaceDefinitionStore(
             string filePath = null,
@@ -69,21 +87,47 @@ namespace TopToolbar.Services.Workspaces
         {
             ArgumentNullException.ThrowIfNull(workspace);
 
-            var document = await LoadDocumentAsync(cancellationToken).ConfigureAwait(false);
-            document.Workspaces ??= new List<WorkspaceDefinition>();
+            for (var attempt = 0; attempt < SaveRetryCount; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
 
-            document.Workspaces.RemoveAll(ws =>
-                string.Equals(ws.Id, workspace.Id, StringComparison.OrdinalIgnoreCase)
-                || (
-                    !string.IsNullOrWhiteSpace(ws.Name)
-                    && !string.IsNullOrWhiteSpace(workspace.Name)
-                    && string.Equals(ws.Name, workspace.Name, StringComparison.OrdinalIgnoreCase)
-                )
-            );
+                var snapshot = await LoadDocumentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                var document = snapshot.Document;
+                document.Workspaces ??= new List<WorkspaceDefinition>();
 
-            document.Workspaces.Insert(0, workspace);
+                document.Workspaces.RemoveAll(ws =>
+                    string.Equals(ws.Id, workspace.Id, StringComparison.OrdinalIgnoreCase)
+                    || (
+                        !string.IsNullOrWhiteSpace(ws.Name)
+                        && !string.IsNullOrWhiteSpace(workspace.Name)
+                        && string.Equals(ws.Name, workspace.Name, StringComparison.OrdinalIgnoreCase)
+                    )
+                );
 
-            await SaveDocumentAsync(document, cancellationToken).ConfigureAwait(false);
+                document.Workspaces.Insert(0, workspace);
+
+                try
+                {
+                    if (await TrySaveDocumentAsync(document, snapshot.VersionTicks, cancellationToken)
+                        .ConfigureAwait(false))
+                    {
+                        return;
+                    }
+                }
+                catch (IOException) when (attempt + 1 < SaveRetryCount)
+                {
+                }
+                catch (UnauthorizedAccessException) when (attempt + 1 < SaveRetryCount)
+                {
+                }
+
+                if (attempt + 1 < SaveRetryCount)
+                {
+                    await Task.Delay(SaveRetryDelayMilliseconds, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            throw new IOException("Failed to save workspace definition after multiple retries.");
         }
 
         public async Task<bool> DeleteWorkspaceAsync(
@@ -96,22 +140,47 @@ namespace TopToolbar.Services.Workspaces
                 return false;
             }
 
-            var document = await LoadDocumentAsync(cancellationToken).ConfigureAwait(false);
-            if (document.Workspaces == null || document.Workspaces.Count == 0)
+            for (var attempt = 0; attempt < SaveRetryCount; attempt++)
             {
-                return false;
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var snapshot = await LoadDocumentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                var document = snapshot.Document;
+                if (document.Workspaces == null || document.Workspaces.Count == 0)
+                {
+                    return false;
+                }
+
+                var removed = document.Workspaces.RemoveAll(ws =>
+                    string.Equals(ws.Id, workspaceId, StringComparison.OrdinalIgnoreCase)
+                );
+                if (removed == 0)
+                {
+                    return false;
+                }
+
+                try
+                {
+                    if (await TrySaveDocumentAsync(document, snapshot.VersionTicks, cancellationToken)
+                        .ConfigureAwait(false))
+                    {
+                        return true;
+                    }
+                }
+                catch (IOException) when (attempt + 1 < SaveRetryCount)
+                {
+                }
+                catch (UnauthorizedAccessException) when (attempt + 1 < SaveRetryCount)
+                {
+                }
+
+                if (attempt + 1 < SaveRetryCount)
+                {
+                    await Task.Delay(SaveRetryDelayMilliseconds, cancellationToken).ConfigureAwait(false);
+                }
             }
 
-            var removed = document.Workspaces.RemoveAll(ws =>
-                string.Equals(ws.Id, workspaceId, StringComparison.OrdinalIgnoreCase)
-            );
-            if (removed == 0)
-            {
-                return false;
-            }
-
-            await SaveDocumentAsync(document, cancellationToken).ConfigureAwait(false);
-            return true;
+            throw new IOException("Failed to delete workspace definition after multiple retries.");
         }
 
         public Task SaveAllAsync(
@@ -123,10 +192,95 @@ namespace TopToolbar.Services.Workspaces
                 : new List<WorkspaceDefinition>();
 
             var document = new WorkspaceDocument { Workspaces = list };
-            return SaveDocumentAsync(document, cancellationToken);
+            return SaveDocumentWithRetryAsync(document, cancellationToken);
+        }
+
+        public async Task<bool> UpdateLastLaunchedTimeAsync(
+            string workspaceId,
+            long timestamp,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(workspaceId))
+            {
+                return false;
+            }
+
+            for (var attempt = 0; attempt < SaveRetryCount; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var snapshot = await LoadDocumentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                var document = snapshot.Document;
+                if (document.Workspaces == null || document.Workspaces.Count == 0)
+                {
+                    return false;
+                }
+
+                var updated = false;
+                foreach (var workspace in document.Workspaces)
+                {
+                    if (workspace == null)
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(workspace.Id, workspaceId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        workspace.LastLaunchedTime = timestamp;
+                        updated = true;
+                        break;
+                    }
+                }
+
+                if (!updated)
+                {
+                    return false;
+                }
+
+                try
+                {
+                    if (await TrySaveDocumentAsync(document, snapshot.VersionTicks, cancellationToken)
+                        .ConfigureAwait(false))
+                    {
+                        return true;
+                    }
+                }
+                catch (IOException) when (attempt + 1 < SaveRetryCount)
+                {
+                }
+                catch (UnauthorizedAccessException) when (attempt + 1 < SaveRetryCount)
+                {
+                }
+
+                if (attempt + 1 < SaveRetryCount)
+                {
+                    await Task.Delay(SaveRetryDelayMilliseconds, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            throw new IOException("Failed to update workspace launch time after multiple retries.");
         }
         
         private async Task<WorkspaceDocument> LoadDocumentAsync(CancellationToken cancellationToken)
+        {
+            var snapshot = await LoadDocumentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            if (snapshot.MigratedFromLegacy)
+            {
+                try
+                {
+                    await SaveDocumentWithRetryAsync(snapshot.Document, cancellationToken).ConfigureAwait(false);
+                    await TryClearLegacyConfigAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.LogWarning($"WorkspaceDefinitionStore: migration persistence failed - {ex.Message}");
+                }
+            }
+
+            return snapshot.Document;
+        }
+
+        private async Task<DocumentSnapshot> LoadDocumentSnapshotAsync(CancellationToken cancellationToken)
         {
             if (!File.Exists(_filePath))
             {
@@ -134,13 +288,13 @@ namespace TopToolbar.Services.Workspaces
                     .ConfigureAwait(false);
                 if (migrated != null && migrated.Workspaces != null && migrated.Workspaces.Count > 0)
                 {
-                    await SaveDocumentAsync(migrated, cancellationToken).ConfigureAwait(false);
-                    await TryClearLegacyConfigAsync(cancellationToken).ConfigureAwait(false);
-                    return migrated;
+                    return new DocumentSnapshot(migrated, 0, migratedFromLegacy: true);
                 }
 
-                return new WorkspaceDocument();
+                return new DocumentSnapshot(new WorkspaceDocument(), 0, migratedFromLegacy: false);
             }
+
+            var versionTicks = FileConcurrencyGuard.GetFileVersionUtcTicks(_filePath);
 
             try
             {
@@ -153,20 +307,55 @@ namespace TopToolbar.Services.Workspaces
                     stream,
                     WorkspaceProviderJsonContext.Default.WorkspaceDocument,
                     cancellationToken).ConfigureAwait(false);
-                return document ?? new WorkspaceDocument();
+                return new DocumentSnapshot(document ?? new WorkspaceDocument(), versionTicks, migratedFromLegacy: false);
             }
             catch (JsonException)
             {
-                return new WorkspaceDocument();
+                return new DocumentSnapshot(new WorkspaceDocument(), versionTicks, migratedFromLegacy: false);
             }
             catch (IOException)
             {
-                return new WorkspaceDocument();
+                return new DocumentSnapshot(new WorkspaceDocument(), versionTicks, migratedFromLegacy: false);
             }
         }
 
-        private async Task SaveDocumentAsync(
+        private async Task SaveDocumentWithRetryAsync(
             WorkspaceDocument document,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(document);
+
+            for (var attempt = 0; attempt < SaveRetryCount; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var expectedVersion = FileConcurrencyGuard.GetFileVersionUtcTicks(_filePath);
+                try
+                {
+                    if (await TrySaveDocumentAsync(document, expectedVersion, cancellationToken).ConfigureAwait(false))
+                    {
+                        return;
+                    }
+                }
+                catch (IOException) when (attempt + 1 < SaveRetryCount)
+                {
+                }
+                catch (UnauthorizedAccessException) when (attempt + 1 < SaveRetryCount)
+                {
+                }
+
+                if (attempt + 1 < SaveRetryCount)
+                {
+                    await Task.Delay(SaveRetryDelayMilliseconds, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            throw new IOException("Failed to save workspace document after multiple retries.");
+        }
+
+        private async Task<bool> TrySaveDocumentAsync(
+            WorkspaceDocument document,
+            long expectedVersionTicks,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(document);
@@ -177,22 +366,45 @@ namespace TopToolbar.Services.Workspaces
                 Directory.CreateDirectory(directory);
             }
 
-            var tempPath = _filePath + ".tmp";
-            await using (var stream = new FileStream(
-                tempPath,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None))
+            await using var writeLock = await FileConcurrencyGuard
+                .AcquireWriteLockAsync(_filePath, cancellationToken)
+                .ConfigureAwait(false);
+
+            var currentVersion = FileConcurrencyGuard.GetFileVersionUtcTicks(_filePath);
+            if (currentVersion != expectedVersionTicks)
             {
-                await JsonSerializer.SerializeAsync(
-                    stream,
-                    document,
-                    WorkspaceProviderJsonContext.Default.WorkspaceDocument,
-                    cancellationToken).ConfigureAwait(false);
+                return false;
             }
 
-            File.Copy(tempPath, _filePath, overwrite: true);
-            File.Delete(tempPath);
+            var tempPath = $"{_filePath}.{Guid.NewGuid():N}.tmp";
+            try
+            {
+                await using (var stream = new FileStream(
+                    tempPath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None))
+                {
+                    await JsonSerializer.SerializeAsync(
+                        stream,
+                        document,
+                        WorkspaceProviderJsonContext.Default.WorkspaceDocument,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                File.Copy(tempPath, _filePath, overwrite: true);
+                return true;
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch
+                {
+                }
+            }
         }
 
         private async Task<WorkspaceDocument> TryMigrateFromProviderConfigAsync(

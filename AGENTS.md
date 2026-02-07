@@ -26,6 +26,7 @@
 ## Build
 - Build using **arm64**. Prefer:
   - `dotnet build .\TopToolbar.slnx -c Debug -r win-arm64 -p:Platform=arm64`
+- Before building, kill `TopToolbar.exe` if it is running.
 
 ## Design/behavior considerations
 - Always consider **virtual desktops** and **multi-monitor** behavior when making changes.

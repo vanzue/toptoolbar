@@ -11,47 +11,98 @@ namespace TopToolbar.Services.Workspaces
 {
     internal static class WorkspaceWindowMatcher
     {
+        private const int ScoreNoMatch = 0;
+        private const int ScoreTitleOnly = 400;
+        private const int ScoreProcessName = 650;
+        private const int ScoreProcessPath = 750;
+        private const int ScorePwaIdentity = 850;
+        private const int ScorePackageIdentity = 900;
+        private const int ScoreAppUserModelId = 1000;
+        private const int ScoreTitleBonusForStrongIdentity = 20;
+
         public static bool IsMatch(WindowInfo window, ApplicationDefinition app)
+        {
+            return GetMatchScore(window, app) > ScoreNoMatch;
+        }
+
+        public static int GetMatchScore(WindowInfo window, ApplicationDefinition app)
         {
             if (window == null || app == null)
             {
-                return false;
+                return ScoreNoMatch;
             }
+
+            var score = ScoreNoMatch;
 
             if (MatchesAppUserModelId(window, app))
             {
-                return true;
+                score = Math.Max(score, ScoreAppUserModelId);
             }
 
             if (MatchesPackageIdentity(window, app))
             {
-                return true;
+                score = Math.Max(score, ScorePackageIdentity);
             }
 
             if (MatchesPwaIdentity(window, app))
             {
-                return true;
+                score = Math.Max(score, ScorePwaIdentity);
             }
 
             if (!IsApplicationFrameHostPath(app.Path))
             {
                 if (MatchesProcessPath(window, app))
                 {
-                    return true;
+                    score = Math.Max(score, ScoreProcessPath);
                 }
 
                 if (MatchesProcessName(window, app))
                 {
-                    return true;
+                    score = Math.Max(score, ScoreProcessName);
                 }
             }
 
             if (MatchesTitle(window, app))
             {
-                return true;
+                if (ShouldAllowTitleMatch(app))
+                {
+                    score = Math.Max(score, ScoreTitleOnly);
+                }
+                else if (score >= ScoreProcessName)
+                {
+                    score += ScoreTitleBonusForStrongIdentity;
+                }
             }
 
-            return false;
+            return score;
+        }
+
+        public static bool IsTitleOnlyMatch(WindowInfo window, ApplicationDefinition app)
+        {
+            if (window == null || app == null)
+            {
+                return false;
+            }
+
+            if (!MatchesTitle(window, app) || !ShouldAllowTitleMatch(app))
+            {
+                return false;
+            }
+
+            if (MatchesAppUserModelId(window, app)
+                || MatchesPackageIdentity(window, app)
+                || MatchesPwaIdentity(window, app))
+            {
+                return false;
+            }
+
+            if (!IsApplicationFrameHostPath(app.Path)
+                && (MatchesProcessPath(window, app) || MatchesProcessName(window, app)))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private static bool MatchesAppUserModelId(WindowInfo window, ApplicationDefinition app)
@@ -147,6 +198,33 @@ namespace TopToolbar.Services.Workspaces
             return !string.IsNullOrWhiteSpace(app.Title)
                 && !string.IsNullOrWhiteSpace(window.Title)
                 && string.Equals(window.Title, app.Title, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ShouldAllowTitleMatch(ApplicationDefinition app)
+        {
+            if (app == null)
+            {
+                return false;
+            }
+
+            if (IsApplicationFrameHostPath(app.Path))
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(app.AppUserModelId)
+                || !string.IsNullOrWhiteSpace(app.PackageFullName)
+                || !string.IsNullOrWhiteSpace(app.PwaAppId))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(app.Path) || !string.IsNullOrWhiteSpace(app.Name))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private static bool IsBrowserProcess(WindowInfo window)

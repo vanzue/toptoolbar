@@ -196,18 +196,27 @@ namespace TopToolbar.Services.Workspaces
                 return false;
             }
 
+            if (NativeWindowHelper.IsWindowCloaked(window.Handle))
+            {
+                return false;
+            }
+
+            if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop)
+                && !isOnCurrentDesktop)
+            {
+                return false;
+            }
+
             if (window.Bounds.IsEmpty)
             {
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(window.Title))
-            {
-                return false;
-            }
-
             resolvedProcessPath = ResolveProcessPath(window, snapshot);
-            if (string.IsNullOrWhiteSpace(resolvedProcessPath))
+            var hasIdentity = !string.IsNullOrWhiteSpace(resolvedProcessPath)
+                || !string.IsNullOrWhiteSpace(window.AppUserModelId)
+                || !string.IsNullOrWhiteSpace(window.PackageFullName);
+            if (string.IsNullOrWhiteSpace(window.Title) && !hasIdentity)
             {
                 return false;
             }
@@ -249,6 +258,22 @@ namespace TopToolbar.Services.Workspaces
             foreach (var candidate in snapshot)
             {
                 if (candidate == null || candidate.Handle == window.Handle)
+                {
+                    continue;
+                }
+
+                if (!candidate.IsVisible || candidate.Bounds.IsEmpty)
+                {
+                    continue;
+                }
+
+                if (NativeWindowHelper.IsWindowCloaked(candidate.Handle))
+                {
+                    continue;
+                }
+
+                if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(candidate.Handle, out var isOnCurrentDesktop)
+                    && !isOnCurrentDesktop)
                 {
                     continue;
                 }

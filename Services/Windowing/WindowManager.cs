@@ -241,7 +241,7 @@ namespace TopToolbar.Services.Windowing
 
             if (!NativeWindowHelper.TryCreateWindowInfo(hwnd, out var info))
             {
-                RemoveWindow(hwnd);
+                RemoveWindow(hwnd, notifyDestroyed: false);
                 return;
             }
 
@@ -275,6 +275,59 @@ namespace TopToolbar.Services.Windowing
             catch
             {
                 // Suppress event handler exceptions.
+            }
+        }
+
+        private void RefreshWindowLocation(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero || _disposed)
+            {
+                return;
+            }
+
+            WindowInfo existing;
+            lock (_gate)
+            {
+                _windows.TryGetValue(hwnd, out existing);
+            }
+
+            if (existing == null)
+            {
+                RefreshWindow(hwnd);
+                return;
+            }
+
+            if (!NativeWindowHelper.TryGetWindowBounds(hwnd, out var bounds))
+            {
+                RemoveWindow(hwnd, notifyDestroyed: !NativeWindowHelper.IsWindowHandleValid(hwnd));
+                return;
+            }
+
+            var isVisible = existing.IsVisible;
+            if (NativeWindowHelper.TryIsWindowVisible(hwnd, out var visible))
+            {
+                isVisible = visible;
+            }
+
+            var updated = existing.WithBounds(bounds, isVisible);
+            updated = AttachMonitorInfo(updated);
+
+            if (ReferenceEquals(updated, existing))
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                _windows[hwnd] = updated;
+            }
+
+            try
+            {
+                WindowUpdated?.Invoke(updated);
+            }
+            catch
+            {
             }
         }
 
@@ -342,7 +395,7 @@ namespace TopToolbar.Services.Windowing
             UpdateMonitorAssignments();
         }
 
-        private void RemoveWindow(IntPtr hwnd)
+        private void RemoveWindow(IntPtr hwnd, bool notifyDestroyed)
         {
             if (hwnd == IntPtr.Zero)
             {
@@ -356,7 +409,7 @@ namespace TopToolbar.Services.Windowing
             }
 
             // Notify listeners that the window was destroyed
-            if (removed)
+            if (removed && notifyDestroyed)
             {
                 try
                 {
@@ -392,15 +445,19 @@ namespace TopToolbar.Services.Windowing
             switch (eventType)
             {
                 case EventObjectDestroy:
-                    RemoveWindow(hwnd);
+                    RemoveWindow(hwnd, notifyDestroyed: true);
                     break;
                 case EventObjectHide:
+                    RemoveWindow(hwnd, notifyDestroyed: false);
+                    break;
                 case EventObjectShow:
                 case EventObjectCreate:
-                case EventObjectLocationChange:
                 case EventObjectNameChange:
                 case EventSystemForeground:
                     RefreshWindow(hwnd);
+                    break;
+                case EventObjectLocationChange:
+                    RefreshWindowLocation(hwnd);
                     break;
                 default:
                     break;

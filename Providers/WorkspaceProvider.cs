@@ -62,10 +62,7 @@ namespace TopToolbar.Providers
                 {
                     try
                     {
-                        if (await ReloadIfChangedAsync().ConfigureAwait(false))
-                        {
-                            WorkspacesChanged?.Invoke(this, EventArgs.Empty);
-                        }
+                        await ReloadIfChangedAsync().ConfigureAwait(false);
                     }
                     catch (Exception)
                     {

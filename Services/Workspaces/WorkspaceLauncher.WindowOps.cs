@@ -20,10 +20,16 @@ namespace TopToolbar.Services.Workspaces
         private async Task ResizeWindowAsync(
             IntPtr handle,
             ApplicationDefinition app,
+            WindowPlacement targetPosition,
             bool launchedNew,
             CancellationToken cancellationToken
         )
         {
+            if (handle == IntPtr.Zero || app == null)
+            {
+                return;
+            }
+
             // Yield immediately to ensure parallel execution
             await Task.Yield();
 
@@ -32,28 +38,44 @@ namespace TopToolbar.Services.Workspaces
 
             try
             {
+                if (NativeWindowHelper.IsWindowCloaked(handle))
+                {
+                    return;
+                }
+
+                if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(handle, out var isOnCurrentDesktop)
+                    && !isOnCurrentDesktop)
+                {
+                    return;
+                }
+
                 LogPerf($"WorkspaceRuntime: [{appLabel}] Resize - begin: minimized={app.Minimized}, maximized={app.Maximized}, position=({app.Position?.X},{app.Position?.Y},{app.Position?.Width},{app.Position?.Height})");
 
-                var position = app.Position != null
-                    ? new WindowPlacement(app.Position.X, app.Position.Y, app.Position.Width, app.Position.Height)
-                    : default;
+                var position = !targetPosition.IsEmpty ? targetPosition : default;
 
-                NativeWindowHelper.SetWindowPlacement(
+                await NativeWindowHelper.SetWindowPlacementAsync(
                     handle,
                     position,
                     app.Maximized,
                     app.Minimized,
-                    launchedNew
-                );
+                    launchedNew,
+                    cancellationToken
+                ).ConfigureAwait(false);
 
                 if (launchedNew && !position.IsEmpty)
                 {
                     await MakeSureWindowArrangedAsync(handle, position, app.Maximized, app.Minimized, cancellationToken)
                         .ConfigureAwait(false);
+                    await PostSettleWindowAsync(handle, position, app.Maximized, app.Minimized, cancellationToken)
+                        .ConfigureAwait(false);
                 }
 
                 sw.Stop();
                 LogPerf($"WorkspaceRuntime: [{appLabel}] Resize - done in {sw.ElapsedMilliseconds} ms");
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -77,6 +99,17 @@ namespace TopToolbar.Services.Workspaces
                     }
 
                     if (workspaceHandles.Contains(window.Handle))
+                    {
+                        continue;
+                    }
+
+                    if (NativeWindowHelper.IsWindowCloaked(window.Handle))
+                    {
+                        continue;
+                    }
+
+                    if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop)
+                        && !isOnCurrentDesktop)
                     {
                         continue;
                     }
@@ -131,10 +164,64 @@ namespace TopToolbar.Services.Workspaces
                 else
                 {
                     stableChecks = 0;
-                    NativeWindowHelper.SetWindowPlacement(handle, position, maximize, minimize);
+                    await NativeWindowHelper.SetWindowPlacementAsync(
+                        handle,
+                        position,
+                        maximize,
+                        minimize,
+                        waitForInputIdle: false,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
 
                 await Task.Delay(WindowArrangePollInterval, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private async Task PostSettleWindowAsync(
+            IntPtr handle,
+            WindowPlacement position,
+            bool maximize,
+            bool minimize,
+            CancellationToken cancellationToken)
+        {
+            var sw = Stopwatch.StartNew();
+
+            while (sw.Elapsed < WindowPostSettleTimeout)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (NativeWindowHelper.IsWindowCloaked(handle))
+                {
+                    return;
+                }
+
+                if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(handle, out var isOnCurrentDesktop)
+                    && !isOnCurrentDesktop)
+                {
+                    return;
+                }
+
+                if (!NativeWindowHelper.TryGetWindowPlacement(
+                    handle,
+                    out var bounds,
+                    out var isMinimized,
+                    out var isMaximized))
+                {
+                    return;
+                }
+
+                if (!IsExpectedPlacement(bounds, position, isMinimized, isMaximized, minimize, maximize))
+                {
+                    await NativeWindowHelper.SetWindowPlacementAsync(
+                        handle,
+                        position,
+                        maximize,
+                        minimize,
+                        waitForInputIdle: false,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+
+                await Task.Delay(WindowPostSettlePollInterval, cancellationToken).ConfigureAwait(false);
             }
         }
 

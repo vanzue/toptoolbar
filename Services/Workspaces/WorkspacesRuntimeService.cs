@@ -32,7 +32,7 @@ namespace TopToolbar.Services.Workspaces
             _windowManager = new WindowManager(_displayManager);
             _managedWindows = WindowClaimer.Instance.Registry;
             _snapshotter = new WorkspaceSnapshotter(_definitionStore, _windowManager, _displayManager, _managedWindows);
-            _launcher = new WorkspaceLauncher(_definitionStore, _windowManager, _managedWindows);
+            _launcher = new WorkspaceLauncher(_definitionStore, _windowManager, _managedWindows, _displayManager);
 
             // Subscribe to window destruction events to keep ManagedWindowRegistry in sync
             _windowManager.WindowDestroyed += OnWindowDestroyed;

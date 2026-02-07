@@ -160,6 +160,11 @@ namespace TopToolbar.Services.Display
                     return true;
                 }
 
+                if (!string.Equals(oldEntry.InstanceId, newEntry.InstanceId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
                 if (oldEntry.Dpi != newEntry.Dpi)
                 {
                     return true;
@@ -228,17 +233,31 @@ namespace TopToolbar.Services.Display
                             info.RcMonitor.Bottom - info.RcMonitor.Top
                         );
 
+                        var scale = dpiX > 0 ? (double)dpiX / 96.0 : 1.0;
+                        if (scale <= 0)
+                        {
+                            scale = 1.0;
+                        }
+
+                        var dpiUnawareRect = new DisplayRect(
+                            (int)Math.Round(bounds.Left / scale),
+                            (int)Math.Round(bounds.Top / scale),
+                            (int)Math.Round(bounds.Width / scale),
+                            (int)Math.Round(bounds.Height / scale)
+                        );
+
                         var id = string.IsNullOrWhiteSpace(info.SzDevice)
                             ? $"DISPLAY{index}"
                             : info.SzDevice.Trim();
+                        var instanceId = ResolveMonitorInstanceId(info.SzDevice, id);
 
                         var monitor = new DisplayMonitor(
                             id,
-                            id,
+                            instanceId,
                             index,
                             (int)dpiX,
                             bounds,
-                            bounds);
+                            dpiUnawareRect);
 
                         snapshots.Add(monitor);
                         index++;
@@ -281,6 +300,37 @@ namespace TopToolbar.Services.Display
             return (long)width * height;
         }
 
+        private static string ResolveMonitorInstanceId(string monitorDeviceName, string fallbackId)
+        {
+            if (string.IsNullOrWhiteSpace(monitorDeviceName))
+            {
+                return fallbackId ?? string.Empty;
+            }
+
+            try
+            {
+                var device = new DISPLAY_DEVICE
+                {
+                    cb = Marshal.SizeOf<DISPLAY_DEVICE>(),
+                    DeviceName = string.Empty,
+                    DeviceString = string.Empty,
+                    DeviceID = string.Empty,
+                    DeviceKey = string.Empty,
+                };
+
+                if (EnumDisplayDevices(monitorDeviceName, 0, ref device, 0)
+                    && !string.IsNullOrWhiteSpace(device.DeviceID))
+                {
+                    return device.DeviceID.Trim();
+                }
+            }
+            catch
+            {
+            }
+
+            return fallbackId ?? string.Empty;
+        }
+
         [DllImport("user32.dll")]
         private static extern bool EnumDisplayMonitors(
             IntPtr hdc,
@@ -291,6 +341,13 @@ namespace TopToolbar.Services.Display
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern bool EnumDisplayDevices(
+            string lpDevice,
+            uint iDevNum,
+            ref DISPLAY_DEVICE lpDisplayDevice,
+            uint dwFlags);
 
         [DllImport("shcore.dll")]
         private static extern int GetDpiForMonitor(
@@ -332,6 +389,26 @@ namespace TopToolbar.Services.Display
 
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
             public string SzDevice;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private struct DISPLAY_DEVICE
+        {
+            public int cb;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string DeviceName;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string DeviceString;
+
+            public int StateFlags;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string DeviceID;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string DeviceKey;
         }
 
         private enum MonitorDpiType

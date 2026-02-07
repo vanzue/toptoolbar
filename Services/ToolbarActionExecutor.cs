@@ -22,12 +22,18 @@ namespace TopToolbar.Services
         private readonly ActionProviderService _providerService;
         private readonly ActionContextFactory _contextFactory;
         private readonly DispatcherQueue _dispatcher;
+        private readonly INotificationService _notificationService;
 
-        public ToolbarActionExecutor(ActionProviderService providerService, ActionContextFactory contextFactory, DispatcherQueue dispatcher = null)
+        public ToolbarActionExecutor(
+            ActionProviderService providerService,
+            ActionContextFactory contextFactory,
+            DispatcherQueue dispatcher = null,
+            INotificationService notificationService = null)
         {
             _providerService = providerService ?? throw new ArgumentNullException(nameof(providerService));
             _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
             _dispatcher = dispatcher;
+            _notificationService = notificationService;
         }
 
         public Task ExecuteAsync(ButtonGroup group, ToolbarButton button, CancellationToken cancellationToken = default)
@@ -39,15 +45,20 @@ namespace TopToolbar.Services
 
             return button.Action.Type switch
             {
-                ToolbarActionType.CommandLine => ExecuteCommandLineAsync(button.Action),
+                ToolbarActionType.CommandLine => ExecuteCommandLineAsync(button, button.Action),
                 ToolbarActionType.Provider => ExecuteProviderActionAsync(group, button, cancellationToken),
                 _ => Task.CompletedTask,
             };
         }
 
-        private static Task ExecuteCommandLineAsync(ToolbarAction action)
+        private Task ExecuteCommandLineAsync(ToolbarButton button, ToolbarAction action)
         {
-            LaunchProcess(action);
+            var error = TryLaunchProcess(action);
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                _notificationService?.ShowError(BuildFailureMessage(button, error));
+            }
+
             return Task.CompletedTask;
         }
 
@@ -112,12 +123,19 @@ namespace TopToolbar.Services
 
                 if (result != null)
                 {
+                    var message = string.IsNullOrWhiteSpace(result.Message)
+                        ? (result.Ok ? string.Empty : "Action failed.")
+                        : result.Message;
+
                     RunOnUi(() =>
                     {
-                        button.StatusMessage = string.IsNullOrWhiteSpace(result.Message)
-                            ? (result.Ok ? string.Empty : "Action failed.")
-                            : result.Message;
+                        button.StatusMessage = message;
                     });
+
+                    if (!result.Ok)
+                    {
+                        _notificationService?.ShowError(BuildFailureMessage(button, message));
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -130,10 +148,12 @@ namespace TopToolbar.Services
             }
             catch (Exception ex)
             {
+                var message = string.IsNullOrWhiteSpace(ex.Message) ? "Action failed." : ex.Message;
                 RunOnUi(() =>
                 {
-                    button.StatusMessage = ex.Message;
+                    button.StatusMessage = message;
                 });
+                _notificationService?.ShowError(BuildFailureMessage(button, message));
                 AppLogger.LogError($"ToolbarActionExecutor: provider invocation threw an exception. - {ex.Message}");
             }
             finally
@@ -163,11 +183,11 @@ namespace TopToolbar.Services
             _dispatcher.TryEnqueue(() => action());
         }
 
-        private static void LaunchProcess(ToolbarAction action)
+        private static string TryLaunchProcess(ToolbarAction action)
         {
             if (string.IsNullOrWhiteSpace(action.Command))
             {
-                return;
+                return null;
             }
 
             try
@@ -189,7 +209,7 @@ namespace TopToolbar.Services
                         Arguments = $"\"{file}\"",
                         UseShellExecute = true,
                     });
-                    return;
+                    return null;
                 }
 
                 // Smart detection: if Command is a URL, open with default browser
@@ -202,7 +222,7 @@ namespace TopToolbar.Services
                         FileName = file,
                         UseShellExecute = true,
                     });
-                    return;
+                    return null;
                 }
 
                 // Smart detection: if Command is a file (not .exe), open with default app
@@ -217,7 +237,7 @@ namespace TopToolbar.Services
                             FileName = file,
                             UseShellExecute = true,
                         });
-                        return;
+                        return null;
                     }
                 }
 
@@ -327,32 +347,48 @@ namespace TopToolbar.Services
                 if (p != null)
                 {
                     AppLogger.LogInfo($"Launch: started pid={p.Id}");
+                    return null;
                 }
-                else
-                {
-                    AppLogger.LogWarning("Launch: Process.Start returned null; attempting fallback without shell execute");
+                AppLogger.LogWarning("Launch: Process.Start returned null; attempting fallback without shell execute");
 
-                    psi.UseShellExecute = false;
-                    psi.Verb = string.Empty;
-                    p = Process.Start(psi);
-                    if (p != null)
-                    {
-                        AppLogger.LogInfo($"Launch fallback: started pid={p.Id}");
-                    }
-                    else
-                    {
-                        AppLogger.LogError("Launch: Process.Start returned null even without shell execute");
-                    }
+                psi.UseShellExecute = false;
+                psi.Verb = string.Empty;
+                p = Process.Start(psi);
+                if (p != null)
+                {
+                    AppLogger.LogInfo($"Launch fallback: started pid={p.Id}");
+                    return null;
                 }
+
+                AppLogger.LogError("Launch: Process.Start returned null even without shell execute");
+                return "Launch failed.";
             }
             catch (Win32Exception ex)
             {
                 AppLogger.LogError($"Launch: Win32Exception {ex.NativeErrorCode} {ex.Message}");
+                return ex.Message;
             }
             catch (Exception ex)
             {
                 AppLogger.LogError($"Launch: Exception {ex.GetType().Name} {ex.Message}");
+                return ex.Message;
             }
+        }
+
+        private static string BuildFailureMessage(ToolbarButton button, string detail)
+        {
+            var name = button?.DisplayName ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(detail))
+            {
+                return string.IsNullOrWhiteSpace(name) ? "Action failed." : $"{name} failed.";
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return detail;
+            }
+
+            return $"{name}: {detail}";
         }
 
         private static string ResolveCommandToFilePath(string file, string workingDir)

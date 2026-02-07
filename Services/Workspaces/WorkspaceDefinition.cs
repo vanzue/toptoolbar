@@ -25,7 +25,7 @@ namespace TopToolbar.Services.Workspaces
         public bool IsShortcutNeeded { get; set; }
 
         [JsonPropertyName("move-existing-windows")]
-        public bool MoveExistingWindows { get; set; }
+        public bool MoveExistingWindows { get; set; } = true;
 
         [JsonPropertyName("monitor-configuration")]
         public List<MonitorDefinition> Monitors { get; set; } = new();

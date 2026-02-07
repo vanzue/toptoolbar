@@ -107,6 +107,44 @@ namespace TopToolbar.Services.Windowing
             return true;
         }
 
+        public static bool TryGetWindowBounds(IntPtr hwnd, out WindowBounds bounds)
+        {
+            bounds = default;
+
+            if (hwnd == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            if (GetWindowRect(hwnd, out var rect))
+            {
+                bounds = new WindowBounds(rect.Left, rect.Top, rect.Right, rect.Bottom);
+                return true;
+            }
+
+            return false;
+        }
+
+        public static bool TryIsWindowVisible(IntPtr hwnd, out bool isVisible)
+        {
+            isVisible = false;
+
+            if (hwnd == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                isVisible = IsWindowVisible(hwnd);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static bool HasToolWindowStyle(IntPtr hwnd)
         {
             if (hwnd == IntPtr.Zero)
@@ -371,6 +409,29 @@ namespace TopToolbar.Services.Windowing
 
                 var hr = manager.IsWindowOnCurrentVirtualDesktop(hwnd, out isOnCurrentDesktop);
                 return hr == 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static bool IsWindowHandleValid(IntPtr hwnd)
+        {
+            return hwnd != IntPtr.Zero && IsWindow(hwnd);
+        }
+
+        public static bool IsWindowCloaked(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                var hr = DwmGetWindowAttribute(hwnd, DwmwaCloaked, out var cloaked, sizeof(int));
+                return hr == 0 && cloaked != 0;
             }
             catch
             {

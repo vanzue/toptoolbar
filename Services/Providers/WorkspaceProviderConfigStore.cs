@@ -7,7 +7,9 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using TopToolbar.Logging;
 using TopToolbar.Models.Providers;
+using TopToolbar.Services.Storage;
 using TopToolbar.Serialization;
 using TopToolbar.Services.Workspaces;
 
@@ -15,6 +17,8 @@ namespace TopToolbar.Services.Providers
 {
     internal sealed class WorkspaceProviderConfigStore
     {
+        private const int SaveRetryCount = 6;
+        private const int SaveRetryDelayMilliseconds = 60;
         private readonly string _filePath;
 
         public WorkspaceProviderConfigStore(string filePath = null)
@@ -59,16 +63,267 @@ namespace TopToolbar.Services.Providers
                 Directory.CreateDirectory(directory);
             }
 
-            config.LastUpdated = DateTimeOffset.UtcNow;
+            var workingConfig = CloneConfig(config);
+            var previousLastUpdated = workingConfig.LastUpdated;
+            var conflictLogged = false;
 
-            var tempPath = _filePath + ".tmp";
-            await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            for (var attempt = 0; attempt < SaveRetryCount; attempt++)
             {
-                await JsonSerializer.SerializeAsync(stream, config, WorkspaceProviderJsonContext.Default.WorkspaceProviderConfig, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!conflictLogged && previousLastUpdated != default)
+                {
+                    var latest = await LoadAsync(cancellationToken).ConfigureAwait(false);
+                    if (latest.LastUpdated > previousLastUpdated)
+                    {
+                        var attemptedBase = previousLastUpdated;
+                        workingConfig = MergeConfig(latest, workingConfig);
+                        previousLastUpdated = latest.LastUpdated;
+                        conflictLogged = true;
+                        AppLogger.LogWarning(
+                            $"WorkspaceProviderConfigStore: detected concurrent update. " +
+                            $"existing={latest.LastUpdated:O}, attemptedBase={attemptedBase:O}");
+                    }
+                }
+
+                var expectedVersion = FileConcurrencyGuard.GetFileVersionUtcTicks(_filePath);
+                workingConfig.LastUpdated = DateTimeOffset.UtcNow;
+
+                try
+                {
+                    if (await TrySaveConfigAsync(workingConfig, expectedVersion, cancellationToken).ConfigureAwait(false))
+                    {
+                        config.LastUpdated = workingConfig.LastUpdated;
+                        config.Buttons = CloneButtons(workingConfig.Buttons);
+                        config.Data = workingConfig.Data;
+                        return;
+                    }
+                }
+                catch (IOException) when (attempt + 1 < SaveRetryCount)
+                {
+                }
+                catch (UnauthorizedAccessException) when (attempt + 1 < SaveRetryCount)
+                {
+                }
+
+                if (attempt + 1 < SaveRetryCount)
+                {
+                    await Task.Delay(SaveRetryDelayMilliseconds, cancellationToken).ConfigureAwait(false);
+                }
             }
 
-            File.Copy(tempPath, _filePath, overwrite: true);
-            File.Delete(tempPath);
+            throw new IOException("Failed to save workspace provider config after multiple retries.");
+        }
+
+        private WorkspaceProviderConfig MergeConfig(
+            WorkspaceProviderConfig latest,
+            WorkspaceProviderConfig incoming)
+        {
+            var merged = CloneConfig(latest);
+
+            if (incoming == null)
+            {
+                return merged;
+            }
+
+            if (incoming.SchemaVersion != 0)
+            {
+                merged.SchemaVersion = incoming.SchemaVersion;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.ProviderId))
+            {
+                merged.ProviderId = incoming.ProviderId;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.DisplayName))
+            {
+                merged.DisplayName = incoming.DisplayName;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Description))
+            {
+                merged.Description = incoming.Description;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Author))
+            {
+                merged.Author = incoming.Author;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Version))
+            {
+                merged.Version = incoming.Version;
+            }
+
+            merged.Enabled = incoming.Enabled;
+            if (incoming.Data != null)
+            {
+                merged.Data = incoming.Data;
+            }
+
+            merged.Buttons = MergeButtons(latest?.Buttons, incoming.Buttons);
+            return merged;
+        }
+
+        private static System.Collections.Generic.List<WorkspaceButtonConfig> MergeButtons(
+            System.Collections.Generic.IReadOnlyList<WorkspaceButtonConfig> latestButtons,
+            System.Collections.Generic.IReadOnlyList<WorkspaceButtonConfig> incomingButtons)
+        {
+            var merged = new System.Collections.Generic.Dictionary<string, WorkspaceButtonConfig>(StringComparer.OrdinalIgnoreCase);
+
+            if (latestButtons != null)
+            {
+                for (var i = 0; i < latestButtons.Count; i++)
+                {
+                    var button = latestButtons[i];
+                    if (button == null)
+                    {
+                        continue;
+                    }
+
+                    merged[GetButtonKey(button)] = CloneButton(button);
+                }
+            }
+
+            if (incomingButtons != null)
+            {
+                for (var i = 0; i < incomingButtons.Count; i++)
+                {
+                    var button = incomingButtons[i];
+                    if (button == null)
+                    {
+                        continue;
+                    }
+
+                    merged[GetButtonKey(button)] = CloneButton(button);
+                }
+            }
+
+            return new System.Collections.Generic.List<WorkspaceButtonConfig>(merged.Values);
+        }
+
+        private static string GetButtonKey(WorkspaceButtonConfig button)
+        {
+            if (button == null)
+            {
+                return string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(button.WorkspaceId))
+            {
+                return "workspace:" + button.WorkspaceId.Trim();
+            }
+
+            return "id:" + (button.Id ?? string.Empty).Trim();
+        }
+
+        private WorkspaceProviderConfig CloneConfig(WorkspaceProviderConfig config)
+        {
+            if (config == null)
+            {
+                return CreateDefaultConfig();
+            }
+
+            var json = JsonSerializer.Serialize(config, WorkspaceProviderJsonContext.Default.WorkspaceProviderConfig);
+            var clone = JsonSerializer.Deserialize(json, WorkspaceProviderJsonContext.Default.WorkspaceProviderConfig);
+            if (clone == null)
+            {
+                return CreateDefaultConfig();
+            }
+
+            clone.Buttons ??= new System.Collections.Generic.List<WorkspaceButtonConfig>();
+            return clone;
+        }
+
+        private static WorkspaceButtonConfig CloneButton(WorkspaceButtonConfig button)
+        {
+            if (button == null)
+            {
+                return new WorkspaceButtonConfig();
+            }
+
+            return new WorkspaceButtonConfig
+            {
+                Id = button.Id ?? string.Empty,
+                WorkspaceId = button.WorkspaceId ?? string.Empty,
+                Name = button.Name ?? string.Empty,
+                Description = button.Description ?? string.Empty,
+                Enabled = button.Enabled,
+                SortOrder = button.SortOrder,
+                Icon = button.Icon == null
+                    ? null
+                    : new TopToolbar.Models.Providers.ProviderIcon
+                    {
+                        Type = button.Icon.Type,
+                        Path = button.Icon.Path ?? string.Empty,
+                        Glyph = button.Icon.Glyph ?? string.Empty,
+                        CatalogId = button.Icon.CatalogId ?? string.Empty,
+                    },
+            };
+        }
+
+        private static System.Collections.Generic.List<WorkspaceButtonConfig> CloneButtons(
+            System.Collections.Generic.IReadOnlyList<WorkspaceButtonConfig> buttons)
+        {
+            var clones = new System.Collections.Generic.List<WorkspaceButtonConfig>();
+            if (buttons == null)
+            {
+                return clones;
+            }
+
+            for (var i = 0; i < buttons.Count; i++)
+            {
+                var button = buttons[i];
+                if (button != null)
+                {
+                    clones.Add(CloneButton(button));
+                }
+            }
+
+            return clones;
+        }
+
+        private async Task<bool> TrySaveConfigAsync(
+            WorkspaceProviderConfig config,
+            long expectedVersionTicks,
+            CancellationToken cancellationToken)
+        {
+            await using var writeLock = await FileConcurrencyGuard
+                .AcquireWriteLockAsync(_filePath, cancellationToken)
+                .ConfigureAwait(false);
+
+            var currentVersion = FileConcurrencyGuard.GetFileVersionUtcTicks(_filePath);
+            if (currentVersion != expectedVersionTicks)
+            {
+                return false;
+            }
+
+            var tempPath = $"{_filePath}.{Guid.NewGuid():N}.tmp";
+            try
+            {
+                await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    await JsonSerializer.SerializeAsync(
+                        stream,
+                        config,
+                        WorkspaceProviderJsonContext.Default.WorkspaceProviderConfig,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                File.Copy(tempPath, _filePath, overwrite: true);
+                return true;
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch
+                {
+                }
+            }
         }
 
         public WorkspaceProviderConfig CreateDefaultConfig()

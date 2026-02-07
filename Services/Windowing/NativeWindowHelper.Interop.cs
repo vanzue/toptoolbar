@@ -24,6 +24,7 @@ namespace TopToolbar.Services.Windowing
         private const long WsChild = 0x40000000L;
         private const long WsMinimizeBox = 0x00020000L;
         private const long WsExToolWindow = 0x00000080L;
+        private const int DwmwaCloaked = 14;
         private const ushort ValueTypeLpwstr = 31;
         private const int WaitForInputIdleTimeoutMilliseconds = 5000;
         private const int WindowVisibilityTimeoutMilliseconds = 5000;
@@ -122,6 +123,14 @@ namespace TopToolbar.Services.Windowing
             IntPtr hwnd,
             ref Guid riid,
             out IntPtr propertyStore
+        );
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmGetWindowAttribute(
+            IntPtr hwnd,
+            int dwAttribute,
+            out int pvAttribute,
+            int cbAttribute
         );
 
         [DllImport("ole32.dll")]

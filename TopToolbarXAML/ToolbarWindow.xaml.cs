@@ -28,9 +28,11 @@ namespace TopToolbar
         private readonly ToolbarActionExecutor _actionExecutor;
         private readonly BuiltinProvider _builtinProvider;
         private readonly ToolbarViewModel _vm;
+        private readonly NotificationService _notificationService;
 
         private readonly TopToolbar.Stores.ToolbarStore _store = new();
         public ToolbarItemsViewModel ItemsViewModel { get; }
+        public NotificationService NotificationService => _notificationService;
         private Timer _monitorTimer;
         private Timer _configWatcherDebounce;
         private bool _isVisible;
@@ -52,7 +54,8 @@ namespace TopToolbar
             _contextFactory = new ActionContextFactory();
             _providerRuntime = new ActionProviderRuntime();
             _providerService = new ActionProviderService(_providerRuntime);
-            _actionExecutor = new ToolbarActionExecutor(_providerService, _contextFactory, DispatcherQueue);
+            _notificationService = new NotificationService(DispatcherQueue);
+            _actionExecutor = new ToolbarActionExecutor(_providerService, _contextFactory, DispatcherQueue, _notificationService);
             _builtinProvider = new BuiltinProvider();
             _vm = new ToolbarViewModel(_configService, _providerService, _contextFactory);
             ItemsViewModel = new ToolbarItemsViewModel(_store);

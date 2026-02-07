@@ -94,13 +94,15 @@ namespace TopToolbar
             if (
                 e.PropertyName == nameof(SettingsViewModel.SelectedGroup)
                 || e.PropertyName == nameof(SettingsViewModel.HasNoSelectedGroup)
+                || e.PropertyName == nameof(SettingsViewModel.SelectedWorkspace)
             )
             {
                 EnsureLeftPaneColumn();
                 _leftPaneColumnCache ??= GetLeftPaneColumn();
-                if (_leftPaneColumnCache != null && _vm.HasNoSelectedGroup)
+                if (_leftPaneColumnCache != null)
                 {
-                    _leftPaneColumnCache.Width = new GridLength(240);
+                    // Keep navigation pane width stable so Groups/Workspaces headers and actions remain visible.
+                    _leftPaneColumnCache.Width = new GridLength(340);
                 }
             }
         }
