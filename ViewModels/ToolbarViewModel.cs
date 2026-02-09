@@ -22,8 +22,11 @@ namespace TopToolbar.ViewModels
         private readonly ActionContextFactory _contextFactory;
         private readonly HashSet<string> _staticGroupIds = new(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource _loadCts = new();
+        private ToolbarDisplayMode _displayMode = ToolbarDisplayMode.TopBar;
 
         public ObservableCollection<ButtonGroup> Groups { get; } = new();
+
+        public ToolbarDisplayMode DisplayMode => _displayMode;
 
         public ToolbarViewModel(
             ToolbarConfigService configService,
@@ -58,6 +61,8 @@ namespace TopToolbar.ViewModels
 
             try
             {
+                _displayMode = config.DisplayMode;
+
                 foreach (var group in config.Groups ?? Enumerable.Empty<ButtonGroup>())
                 {
                     token.ThrowIfCancellationRequested();

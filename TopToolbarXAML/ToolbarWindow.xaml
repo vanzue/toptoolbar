@@ -8,6 +8,9 @@
     xmlns:ttcontrols="using:TopToolbar.Controls"
     xmlns:viewModels="using:TopToolbar.ViewModels">
     <Grid
+        x:Name="RootGrid"
+        KeyDown="OnRootKeyDown"
+        IsTabStop="True"
         Background="Transparent"
         Padding="{x:Bind local:ToolbarMetrics.ToolbarShadowPadding}"
         UseLayoutRounding="True">
@@ -243,6 +246,13 @@
                 </StackPanel>
             </ScrollViewer>
         </Border>
+        <Canvas x:Name="RadialCanvas"
+                Visibility="Collapsed"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                IsHitTestVisible="True"
+                MinWidth="280"
+                MinHeight="280"/>
         <StackPanel
             x:Name="NotificationHost"
             HorizontalAlignment="Center"

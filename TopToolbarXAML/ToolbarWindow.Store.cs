@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using TopToolbar.Actions;
+using TopToolbar.Models;
 using Timer = System.Timers.Timer;
 using Path = System.IO.Path;
 
@@ -57,14 +58,22 @@ namespace TopToolbar
                     if (DispatcherQueue == null || DispatcherQueue.HasThreadAccess)
                     {
                         SyncStaticGroupsIntoStore();
-                        ResizeToContent();
+                        ApplyDisplayMode(_vm.DisplayMode);
+                        if (_currentDisplayMode == ToolbarDisplayMode.TopBar)
+                        {
+                            ResizeToContent();
+                        }
                     }
                     else
                     {
                         _ = DispatcherQueue.TryEnqueue(() =>
                         {
                             SyncStaticGroupsIntoStore();
-                            ResizeToContent();
+                            ApplyDisplayMode(_vm.DisplayMode);
+                            if (_currentDisplayMode == ToolbarDisplayMode.TopBar)
+                            {
+                                ResizeToContent();
+                            }
                         });
                     }
                 };

@@ -20,6 +20,7 @@ namespace TopToolbar.ViewModels
         private readonly ToolbarConfigService _service;
         private readonly Timer _saveDebounce = new(300) { AutoReset = false };
         private DispatcherQueue _dispatcher;
+        private bool _suppressGeneralSave;
 
         public SettingsViewModel(ToolbarConfigService service)
         {
@@ -43,27 +44,38 @@ namespace TopToolbar.ViewModels
 
             void Apply()
             {
-                Groups.Clear();
-                foreach (var g in toolbarConfig.Groups)
-                {
-                    Groups.Add(g);
-                    HookGroup(g);
-                }
+                _suppressGeneralSave = true;
 
-                if (SelectedGroup == null && Groups.Count > 0)
-                {
-                    SelectedGroup = Groups[0];
-                    SelectedButton = SelectedGroup.Buttons.FirstOrDefault();
-                }
-
-                _suppressWorkspaceSave = true;
                 try
                 {
-                    LoadWorkspaceButtons(workspaceConfig, workspaceDefinitions);
+                    DisplayMode = toolbarConfig.DisplayMode;
+
+                    Groups.Clear();
+                    foreach (var g in toolbarConfig.Groups)
+                    {
+                        Groups.Add(g);
+                        HookGroup(g);
+                    }
+
+                    if (SelectedGroup == null && Groups.Count > 0)
+                    {
+                        SelectedGroup = Groups[0];
+                        SelectedButton = SelectedGroup.Buttons.FirstOrDefault();
+                    }
+
+                    _suppressWorkspaceSave = true;
+                    try
+                    {
+                        LoadWorkspaceButtons(workspaceConfig, workspaceDefinitions);
+                    }
+                    finally
+                    {
+                        _suppressWorkspaceSave = false;
+                    }
                 }
                 finally
                 {
-                    _suppressWorkspaceSave = false;
+                    _suppressGeneralSave = false;
                 }
             }
 
@@ -118,6 +130,7 @@ namespace TopToolbar.ViewModels
             // Preserve group Id to avoid duplication on reload
             var cfg = new ToolbarConfig
             {
+                DisplayMode = DisplayMode,
                 Groups = Groups.Select(g => new ButtonGroup
                 {
                     Id = g.Id,

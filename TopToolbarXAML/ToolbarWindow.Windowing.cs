@@ -42,6 +42,7 @@ namespace TopToolbar
         private IntPtr DpiWndProc(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam)
         {
             const int WM_DPICHANGED = 0x02E0;
+            const int WM_HOTKEY = 0x0312;
             if (msg == WM_DPICHANGED)
             {
                 // lParam points to a RECT in new DPI suggested size/pos
@@ -55,6 +56,14 @@ namespace TopToolbar
                 }
                 catch
                 {
+                }
+            }
+            else if (msg == WM_HOTKEY)
+            {
+                if (wParam.ToInt32() == RadialHotKeyId)
+                {
+                    TryEnqueueRadialHotKeyPress();
+                    return IntPtr.Zero;
                 }
             }
 
@@ -131,10 +140,19 @@ namespace TopToolbar
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
         [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
 
 
     }

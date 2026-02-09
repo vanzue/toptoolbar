@@ -12,4 +12,6 @@ public class ToolbarConfig
     public List<ButtonGroup> Groups { get; set; } = new();
 
     public Dictionary<string, string> Bindings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public ToolbarDisplayMode DisplayMode { get; set; } = ToolbarDisplayMode.TopBar;
 }

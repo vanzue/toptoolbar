@@ -177,8 +177,13 @@ namespace TopToolbar
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     SyncStaticGroupsIntoStore();
-                    ResizeToContent();
-                    PositionAtTopCenter();
+                    ApplyDisplayMode(_vm.DisplayMode);
+                    if (_currentDisplayMode == ToolbarDisplayMode.TopBar)
+                    {
+                        ResizeToContent();
+                        PositionAtTopCenter();
+                    }
+
                     _builtConfigOnce = true;
                 });
             };
@@ -195,6 +200,9 @@ namespace TopToolbar
                 _configWatcher.EnableRaisingEvents = false;
                 _configWatcher.Dispose();
             }
+
+            UnregisterRadialHotKey();
+            StopRadialHotKeyFallbackPolling(disposeTimer: true);
 
             try
             {
@@ -231,6 +239,7 @@ namespace TopToolbar
             PositionAtTopCenter();
             AppWindow.Hide();
             _isVisible = false;
+            ApplyDisplayMode(_currentDisplayMode);
             _initializedLayout = true;
         }
 

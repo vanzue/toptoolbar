@@ -57,6 +57,10 @@ namespace TopToolbar.Services
             config ??= new ToolbarConfig();
             config.Groups ??= new List<ButtonGroup>();
             config.Bindings ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!Enum.IsDefined(typeof(ToolbarDisplayMode), config.DisplayMode))
+            {
+                config.DisplayMode = ToolbarDisplayMode.TopBar;
+            }
 
             foreach (var group in config.Groups)
             {
@@ -100,6 +104,7 @@ namespace TopToolbar.Services
                     ["Ctrl+Space"] = "palette.open",
                     ["Alt+W"] = "workspace.switcher",
                 },
+                DisplayMode = ToolbarDisplayMode.TopBar,
             };
         }
     }

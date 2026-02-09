@@ -490,6 +490,14 @@
                                               Toggled="OnStartupToggled"/>
                             </tkcontrols:SettingsCard>
 
+                            <tkcontrols:SettingsCard Header="Toolbar appearance"
+                                                    Description="Choose how TopToolbar appears when invoked.">
+                                <ComboBox SelectedIndex="{x:Bind ViewModel.DisplayModeIndex, Mode=TwoWay}">
+                                    <ComboBoxItem Content="Top bar (screen edge trigger)"/>
+                                    <ComboBoxItem Content="Radial menu (Alt+Space)"/>
+                                </ComboBox>
+                            </tkcontrols:SettingsCard>
+
                             <tkcontrols:SettingsCard Header="Workspace snapshot"
                                                     Description="Capture the current window layout as a workspace.">
                                 <Button Content="Create snapshot"

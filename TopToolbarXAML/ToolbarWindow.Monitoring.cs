@@ -14,14 +14,30 @@ namespace TopToolbar
     {
         private void StartMonitoring()
         {
+            if (_monitorTimer != null)
+            {
+                _monitorTimer.Start();
+                return;
+            }
+
             _monitorTimer = new Timer(120);
             _monitorTimer.Elapsed += MonitorTimer_Elapsed;
             _monitorTimer.AutoReset = true;
             _monitorTimer.Start();
         }
 
+        private void StopMonitoring()
+        {
+            _monitorTimer?.Stop();
+        }
+
         private void MonitorTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
+            if (_currentDisplayMode != Models.ToolbarDisplayMode.TopBar)
+            {
+                return;
+            }
+
             GetCursorPos(out var pt);
             var displayArea = DisplayArea.GetFromPoint(new Windows.Graphics.PointInt32(pt.X, pt.Y), DisplayAreaFallback.Primary);
             var topEdge = displayArea.WorkArea.Y;
