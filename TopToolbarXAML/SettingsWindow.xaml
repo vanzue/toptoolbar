@@ -518,99 +518,99 @@
                             <Grid ColumnSpacing="10"
                                     VerticalAlignment="Center"
                                     Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Buttons"
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Buttons"
                                     FontSize="15"
                                     FontWeight="SemiBold"
                                     VerticalAlignment="Center"
                                     Grid.Column="0"/>
-                            <Rectangle Width="1"
+                                <Rectangle Width="1"
                                     Height="18"
                                     Fill="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Opacity="0.35"
                                     VerticalAlignment="Center"
                                     Grid.Column="1"/>
-                            <StackPanel Orientation="Horizontal"
+                                <StackPanel Orientation="Horizontal"
                                     Spacing="6"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
                                     Grid.Column="2">
-                                <Button Content="Add"
+                                    <Button Content="Add"
                                         Click="OnAddButton"
                                         Tag="{x:Bind ViewModel.SelectedGroup}"
                                         VerticalAlignment="Center"/>
-                            </StackPanel>
+                                </StackPanel>
                             </Grid>
 
                             <!-- Buttons as expandable settings -->
                             <ItemsControl ItemsSource="{x:Bind ViewModel.SelectedGroup.Buttons, Mode=OneWay}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="local:ToolbarButton">
-                                    <tkcontrols:SettingsExpander IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:ToolbarButton">
+                                        <tkcontrols:SettingsExpander IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
                                                                  Header="{x:Bind DisplayName, Mode=OneWay}">
-                                        <StackPanel Orientation="Horizontal" Spacing="12">
-                                            <ToggleSwitch IsOn="{x:Bind IsEnabled, Mode=TwoWay}" OnContent="" OffContent=""/>
-                                            <Button Click="OnRemoveButton"
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <ToggleSwitch IsOn="{x:Bind IsEnabled, Mode=TwoWay}" OnContent="" OffContent=""/>
+                                                <Button Click="OnRemoveButton"
                                                     ToolTipService.ToolTip="Remove"
                                                     Background="Transparent"
                                                     BorderBrush="Transparent">
-                                                <FontIcon Glyph="&#xE74D;" FontSize="16" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
-                                            </Button>
-                                        </StackPanel>
-                                        <tkcontrols:SettingsExpander.Items>
-                                            <tkcontrols:SettingsCard Header="Name">
-                                                <TextBox Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                    <FontIcon Glyph="&#xE74D;" FontSize="16" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                                </Button>
+                                            </StackPanel>
+                                            <tkcontrols:SettingsExpander.Items>
+                                                <tkcontrols:SettingsCard Header="Name">
+                                                    <TextBox Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                         Style="{StaticResource StandardTextBoxStyle}"/>
-                                            </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Command">
-                                                <TextBox Text="{x:Bind Action.Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                </tkcontrols:SettingsCard>
+                                                <tkcontrols:SettingsCard Header="Command">
+                                                    <TextBox Text="{x:Bind Action.Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                         Style="{StaticResource StandardTextBoxStyle}"/>
-                                            </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Arguments">
-                                                <TextBox Text="{x:Bind Action.Arguments, Mode=TwoWay}"
+                                                </tkcontrols:SettingsCard>
+                                                <tkcontrols:SettingsCard Header="Arguments">
+                                                    <TextBox Text="{x:Bind Action.Arguments, Mode=TwoWay}"
                                                         Style="{StaticResource StandardTextBoxStyle}"/>
-                                            </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Customize Icon"
+                                                </tkcontrols:SettingsCard>
+                                                <tkcontrols:SettingsCard Header="Customize Icon"
                                                                      Description="Override the auto-detected icon">
-                                                <ToggleSwitch IsOn="{x:Bind IsIconCustomized, Mode=TwoWay}" OnContent="" OffContent=""/>
-                                            </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Icon Type"
+                                                    <ToggleSwitch IsOn="{x:Bind IsIconCustomized, Mode=TwoWay}" OnContent="" OffContent=""/>
+                                                </tkcontrols:SettingsCard>
+                                                <tkcontrols:SettingsCard Header="Icon Type"
                                                                      Visibility="{x:Bind IsIconCustomized, Mode=OneWay}">
-                                                <ComboBox SelectedIndex="{x:Bind IconTypeIndex, Mode=TwoWay}">
-                                                    <ComboBoxItem Content="Icon"/>
-                                                    <ComboBoxItem Content="Image"/>
-                                                </ComboBox>
-                                            </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Icon"
+                                                    <ComboBox SelectedIndex="{x:Bind IconTypeIndex, Mode=TwoWay}">
+                                                        <ComboBoxItem Content="Icon"/>
+                                                        <ComboBoxItem Content="Image"/>
+                                                    </ComboBox>
+                                                </tkcontrols:SettingsCard>
+                                                <tkcontrols:SettingsCard Header="Icon"
                                                                      Visibility="{x:Bind IsIconCustomized, Mode=OneWay}">
-                                                <Button Content="Choose from library"
+                                                    <Button Content="Choose from library"
                                                         Click="OnChooseIconFromLibrary"
                                                         Tag="{x:Bind}" />
-                                            </tkcontrols:SettingsCard>
-                                            <tkcontrols:SettingsCard Header="Image Path"
+                                                </tkcontrols:SettingsCard>
+                                                <tkcontrols:SettingsCard Header="Image Path"
                                                                      Visibility="{x:Bind IsIconCustomized, Mode=OneWay}">
-                                                <Grid ColumnSpacing="8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBox Grid.Column="0"
+                                                    <Grid ColumnSpacing="8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBox Grid.Column="0"
                                                             Text="{x:Bind IconPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                             Style="{StaticResource StandardTextBoxStyle}"/>
-                                                    <Button Grid.Column="1"
+                                                        <Button Grid.Column="1"
                                                             Content="Browse"
                                                             Click="OnBrowseIcon"
                                                             Tag="{x:Bind}"/>
-                                                </Grid>
-                                            </tkcontrols:SettingsCard>
-                                        </tkcontrols:SettingsExpander.Items>
-                                    </tkcontrols:SettingsExpander>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
+                                                    </Grid>
+                                                </tkcontrols:SettingsCard>
+                                            </tkcontrols:SettingsExpander.Items>
+                                        </tkcontrols:SettingsExpander>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
 
