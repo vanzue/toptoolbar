@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 namespace TopToolbar.Services.Windowing
 {
@@ -19,11 +20,61 @@ namespace TopToolbar.Services.Windowing
                 {
                     return (IVirtualDesktopManager)new VirtualDesktopManager();
                 }
-                catch
+                catch (COMException ex)
                 {
+                    TopToolbar.Logging.AppLogger.LogWarning(
+                        $"VirtualDesktop: failed to initialize IVirtualDesktopManager, hr={FormatHResult(ex.HResult)}, message={ex.Message}");
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    TopToolbar.Logging.AppLogger.LogWarning(
+                        $"VirtualDesktop: failed to initialize IVirtualDesktopManager, type={ex.GetType().Name}, hr={FormatHResult(ex.HResult)}, message={ex.Message}");
                     return null;
                 }
             });
+
+        public static bool IsVirtualDesktopManagerAvailable()
+        {
+            try
+            {
+                return VirtualDesktopManagerInstance.Value != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static bool IsVirtualDesktopApiReliable()
+        {
+            if (!IsVirtualDesktopManagerAvailable())
+            {
+                return false;
+            }
+
+            return TryGetCurrentVirtualDesktopId(out _);
+        }
+
+        public static bool TryGetCurrentVirtualDesktopId(out Guid desktopId)
+        {
+            desktopId = Guid.Empty;
+
+            try
+            {
+                var manager = VirtualDesktopManagerInstance.Value;
+                if (manager == null)
+                {
+                    return false;
+                }
+
+                return TryGetCurrentVirtualDesktopId(manager, out desktopId);
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         public static IReadOnlyList<IntPtr> EnumerateProcessWindows(int processId)
         {
@@ -404,16 +455,304 @@ namespace TopToolbar.Services.Windowing
                 var manager = VirtualDesktopManagerInstance.Value;
                 if (manager == null)
                 {
+                    TopToolbar.Logging.AppLogger.LogInfo(
+                        $"VirtualDesktop: IsWindowOnCurrentVirtualDesktop unavailable (manager null), hwnd={FormatHwnd(hwnd)}");
                     return false;
                 }
 
                 var hr = manager.IsWindowOnCurrentVirtualDesktop(hwnd, out isOnCurrentDesktop);
+                if (hr != 0)
+                {
+                    TopToolbar.Logging.AppLogger.LogWarning(
+                        $"VirtualDesktop: IsWindowOnCurrentVirtualDesktop failed, hwnd={FormatHwnd(hwnd)}, hr={FormatHResult(hr)}");
+                }
+
                 return hr == 0;
+            }
+            catch (COMException ex)
+            {
+                TopToolbar.Logging.AppLogger.LogWarning(
+                    $"VirtualDesktop: IsWindowOnCurrentVirtualDesktop exception, hwnd={FormatHwnd(hwnd)}, hr={FormatHResult(ex.HResult)}, message={ex.Message}");
+                return false;
+            }
+            catch
+            {
+                TopToolbar.Logging.AppLogger.LogWarning(
+                    $"VirtualDesktop: IsWindowOnCurrentVirtualDesktop exception, hwnd={FormatHwnd(hwnd)}");
+                return false;
+            }
+        }
+
+        public static bool TryGetWindowVirtualDesktopId(IntPtr hwnd, out Guid desktopId)
+        {
+            desktopId = Guid.Empty;
+
+            if (hwnd == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                var manager = VirtualDesktopManagerInstance.Value;
+                if (manager == null)
+                {
+                    TopToolbar.Logging.AppLogger.LogInfo(
+                        $"VirtualDesktop: GetWindowDesktopId unavailable (manager null), hwnd={FormatHwnd(hwnd)}");
+                    return false;
+                }
+
+                var hr = manager.GetWindowDesktopId(hwnd, out desktopId);
+                if (hr != 0)
+                {
+                    TopToolbar.Logging.AppLogger.LogWarning(
+                        $"VirtualDesktop: GetWindowDesktopId failed, hwnd={FormatHwnd(hwnd)}, hr={FormatHResult(hr)}");
+                }
+                else if (desktopId == Guid.Empty)
+                {
+                    TopToolbar.Logging.AppLogger.LogInfo(
+                        $"VirtualDesktop: GetWindowDesktopId returned empty desktop id, hwnd={FormatHwnd(hwnd)}");
+                }
+
+                return hr == 0 && desktopId != Guid.Empty;
+            }
+            catch (COMException ex)
+            {
+                TopToolbar.Logging.AppLogger.LogWarning(
+                    $"VirtualDesktop: GetWindowDesktopId exception, hwnd={FormatHwnd(hwnd)}, hr={FormatHResult(ex.HResult)}, message={ex.Message}");
+                return false;
+            }
+            catch
+            {
+                TopToolbar.Logging.AppLogger.LogWarning(
+                    $"VirtualDesktop: GetWindowDesktopId exception, hwnd={FormatHwnd(hwnd)}");
+                return false;
+            }
+        }
+
+        public static bool TryMoveWindowToCurrentVirtualDesktop(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                var manager = VirtualDesktopManagerInstance.Value;
+                if (manager == null)
+                {
+                    TopToolbar.Logging.AppLogger.LogInfo(
+                        $"VirtualDesktop: MoveWindowToDesktop unavailable (manager null), hwnd={FormatHwnd(hwnd)}");
+                    return false;
+                }
+
+                var onCurrentDesktopHr = manager.IsWindowOnCurrentVirtualDesktop(hwnd, out var isOnCurrentDesktop);
+                if (onCurrentDesktopHr != 0)
+                {
+                    TopToolbar.Logging.AppLogger.LogWarning(
+                        $"VirtualDesktop: pre-check IsWindowOnCurrentVirtualDesktop failed before move, hwnd={FormatHwnd(hwnd)}, hr={FormatHResult(onCurrentDesktopHr)}");
+                    return false;
+                }
+
+                if (onCurrentDesktopHr == 0 && isOnCurrentDesktop)
+                {
+                    return true;
+                }
+
+                for (var attempt = 0; attempt < 3; attempt++)
+                {
+                    if (!TryGetCurrentVirtualDesktopId(manager, out var currentDesktopId))
+                    {
+                        TopToolbar.Logging.AppLogger.LogInfo(
+                            $"VirtualDesktop: could not resolve current desktop id before move, hwnd={FormatHwnd(hwnd)}, attempt={attempt + 1}");
+                        Thread.Sleep(40);
+                        continue;
+                    }
+
+                    var hr = manager.MoveWindowToDesktop(hwnd, ref currentDesktopId);
+                    if (hr == 0)
+                    {
+                        return true;
+                    }
+
+                    TopToolbar.Logging.AppLogger.LogWarning(
+                        $"VirtualDesktop: MoveWindowToDesktop failed, hwnd={FormatHwnd(hwnd)}, targetDesktopId={currentDesktopId}, attempt={attempt + 1}, hr={FormatHResult(hr)}");
+                    Thread.Sleep(40);
+                }
+
+                return false;
+            }
+            catch (COMException ex)
+            {
+                TopToolbar.Logging.AppLogger.LogWarning(
+                    $"VirtualDesktop: MoveWindowToCurrentVirtualDesktop exception, hwnd={FormatHwnd(hwnd)}, hr={FormatHResult(ex.HResult)}, message={ex.Message}");
+                return false;
+            }
+            catch
+            {
+                TopToolbar.Logging.AppLogger.LogWarning(
+                    $"VirtualDesktop: MoveWindowToCurrentVirtualDesktop exception, hwnd={FormatHwnd(hwnd)}");
+                return false;
+            }
+        }
+
+        private static bool TryGetCurrentVirtualDesktopId(
+            IVirtualDesktopManager manager,
+            out Guid desktopId)
+        {
+            desktopId = Guid.Empty;
+
+            if (manager == null)
+            {
+                return false;
+            }
+
+            // Best-effort fast path: use foreground window desktop as "current desktop".
+            var foreground = GetForegroundWindow();
+            if (foreground != IntPtr.Zero)
+            {
+                _ = GetWindowThreadProcessId(foreground, out var foregroundProcessId);
+                if (foregroundProcessId != (uint)Environment.ProcessId
+                    && TryGetDesktopIdForCurrentDesktopWindow(manager, foreground, out desktopId))
+                {
+                    return true;
+                }
+            }
+
+            var resolved = false;
+            var resolvedDesktopId = Guid.Empty;
+            var sawDesktopQueryFailure = false;
+            var firstDesktopQueryFailureHr = 0;
+            var firstDesktopQueryFailureHwnd = IntPtr.Zero;
+
+            try
+            {
+                _ = EnumWindows(
+                    (hwnd, _) =>
+                    {
+                        if (!IsTopLevelWindow(hwnd))
+                        {
+                            return true;
+                        }
+
+                        if (IsWindowCloaked(hwnd))
+                        {
+                            return true;
+                        }
+
+                        var onCurrentDesktopHr = manager.IsWindowOnCurrentVirtualDesktop(hwnd, out var isOnCurrentDesktop);
+                        if (onCurrentDesktopHr != 0)
+                        {
+                            if (!sawDesktopQueryFailure)
+                            {
+                                sawDesktopQueryFailure = true;
+                                firstDesktopQueryFailureHr = onCurrentDesktopHr;
+                                firstDesktopQueryFailureHwnd = hwnd;
+                            }
+
+                            return true;
+                        }
+
+                        if (!isOnCurrentDesktop)
+                        {
+                            return true;
+                        }
+
+                        if (TryGetDesktopIdForCurrentDesktopWindow(manager, hwnd, out var candidateDesktopId))
+                        {
+                            resolvedDesktopId = candidateDesktopId;
+                            resolved = true;
+                            return false;
+                        }
+
+                        return true;
+                    },
+                    IntPtr.Zero);
             }
             catch
             {
                 return false;
             }
+
+            if (!resolved)
+            {
+                if (sawDesktopQueryFailure)
+                {
+                    TopToolbar.Logging.AppLogger.LogInfo(
+                        $"VirtualDesktop: unable to find probe window on current desktop due to query failures, firstHwnd={FormatHwnd(firstDesktopQueryFailureHwnd)}, firstHr={FormatHResult(firstDesktopQueryFailureHr)}");
+                }
+
+                return false;
+            }
+
+            desktopId = resolvedDesktopId;
+            return desktopId != Guid.Empty;
+        }
+
+        private static bool TryGetDesktopIdForCurrentDesktopWindow(
+            IVirtualDesktopManager manager,
+            IntPtr hwnd,
+            out Guid desktopId)
+        {
+            desktopId = Guid.Empty;
+
+            if (manager == null || hwnd == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                var onCurrentDesktopHr = manager.IsWindowOnCurrentVirtualDesktop(hwnd, out var isOnCurrentDesktop);
+                if (onCurrentDesktopHr != 0)
+                {
+                    TopToolbar.Logging.AppLogger.LogWarning(
+                        $"VirtualDesktop: IsWindowOnCurrentVirtualDesktop failed while resolving desktop id, hwnd={FormatHwnd(hwnd)}, hr={FormatHResult(onCurrentDesktopHr)}");
+                    return false;
+                }
+
+                if (!isOnCurrentDesktop)
+                {
+                    return false;
+                }
+
+                var hr = manager.GetWindowDesktopId(hwnd, out desktopId);
+                if (hr != 0)
+                {
+                    TopToolbar.Logging.AppLogger.LogWarning(
+                        $"VirtualDesktop: GetWindowDesktopId failed while resolving current desktop, hwnd={FormatHwnd(hwnd)}, hr={FormatHResult(hr)}");
+                }
+                else if (desktopId == Guid.Empty)
+                {
+                    TopToolbar.Logging.AppLogger.LogInfo(
+                        $"VirtualDesktop: GetWindowDesktopId returned empty id while resolving current desktop, hwnd={FormatHwnd(hwnd)}");
+                }
+
+                return hr == 0 && desktopId != Guid.Empty;
+            }
+            catch (COMException ex)
+            {
+                TopToolbar.Logging.AppLogger.LogWarning(
+                    $"VirtualDesktop: desktop id resolution exception, hwnd={FormatHwnd(hwnd)}, hr={FormatHResult(ex.HResult)}, message={ex.Message}");
+                return false;
+            }
+            catch
+            {
+                TopToolbar.Logging.AppLogger.LogWarning(
+                    $"VirtualDesktop: desktop id resolution exception, hwnd={FormatHwnd(hwnd)}");
+                return false;
+            }
+        }
+
+        private static string FormatHwnd(IntPtr hwnd)
+        {
+            return $"0x{unchecked((ulong)hwnd.ToInt64()):X}";
+        }
+
+        private static string FormatHResult(int hr)
+        {
+            return $"0x{unchecked((uint)hr):X8}";
         }
 
         public static bool IsWindowHandleValid(IntPtr hwnd)

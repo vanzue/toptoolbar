@@ -80,8 +80,22 @@ namespace TopToolbar.Services.Windowing
             }
             else
             {
-                var result = ShowWindow(hwnd, SwShowNormal);
-                TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: ShowWindow(normal) result={result}");
+                var shouldRestore = TryGetWindowPlacement(
+                    hwnd,
+                    out _,
+                    out var isMinimized,
+                    out var isMaximized)
+                    && (isMinimized || isMaximized);
+                if (shouldRestore)
+                {
+                    var result = ShowWindow(hwnd, SwShowNormal);
+                    TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: ShowWindow(normal) result={result}");
+                }
+                else
+                {
+                    TopToolbar.Logging.AppLogger.LogInfo($"SetWindowPlacement: skipped ShowWindow(normal) for hwnd={hwnd} (already normal)");
+                }
+
                 if (hasPlacement && placementApplied)
                 {
                     await VerifyWindowPlacementWithRetryAsync(hwnd, position, cancellationToken).ConfigureAwait(false);

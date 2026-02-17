@@ -11,5 +11,7 @@ namespace TopToolbar.Services
         void ShowWarning(string message);
 
         void ShowInfo(string message);
+
+        void ShowSuccess(string message);
     }
 }

@@ -127,7 +127,7 @@ namespace TopToolbar.Services.Workspaces
                 windows = windowManager.FindMatches(predicate);
             }
 
-            windows = FilterToCurrentDesktop(windows);
+            windows = PrioritizeCurrentDesktop(windows);
 
             if (knownHandles == null || knownHandles.Count == 0)
             {
@@ -147,23 +147,42 @@ namespace TopToolbar.Services.Workspaces
             return filtered;
         }
 
-        private static IReadOnlyList<WindowInfo> FilterToCurrentDesktop(IReadOnlyList<WindowInfo> windows)
+        private static IReadOnlyList<WindowInfo> PrioritizeCurrentDesktop(IReadOnlyList<WindowInfo> windows)
         {
             if (windows == null || windows.Count == 0)
             {
                 return Array.Empty<WindowInfo>();
             }
 
-            var filtered = new List<WindowInfo>(windows.Count);
+            var currentDesktop = new List<WindowInfo>(windows.Count);
+            var otherDesktop = new List<WindowInfo>(windows.Count);
+
             foreach (var window in windows)
             {
                 if (IsWindowOnCurrentDesktop(window))
                 {
-                    filtered.Add(window);
+                    currentDesktop.Add(window);
+                }
+                else
+                {
+                    otherDesktop.Add(window);
                 }
             }
 
-            return filtered;
+            if (otherDesktop.Count == 0)
+            {
+                return currentDesktop;
+            }
+
+            if (currentDesktop.Count == 0)
+            {
+                return otherDesktop;
+            }
+
+            var ordered = new List<WindowInfo>(currentDesktop.Count + otherDesktop.Count);
+            ordered.AddRange(currentDesktop);
+            ordered.AddRange(otherDesktop);
+            return ordered;
         }
 
         private static bool IsWindowOnCurrentDesktop(WindowInfo window)
@@ -178,8 +197,12 @@ namespace TopToolbar.Services.Workspaces
                 return false;
             }
 
-            if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop)
-                && !isOnCurrentDesktop)
+            if (!NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop))
+            {
+                return false;
+            }
+
+            if (!isOnCurrentDesktop)
             {
                 return false;
             }

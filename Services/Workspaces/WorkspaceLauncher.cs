@@ -197,8 +197,9 @@ namespace TopToolbar.Services.Workspaces
                 if (workspace.MoveExistingWindows)
                 {
                     var workspaceHandles = new HashSet<IntPtr>(successfulApps.Select(r => r.Handle));
+                    var workspaceProcessIds = GetWorkspaceProcessIds(successfulApps);
                     var swPhase3 = Stopwatch.StartNew();
-                    MinimizeExtraneousWindows(workspaceHandles);
+                    MinimizeExtraneousWindows(workspaceHandles, workspaceProcessIds);
                     swPhase3.Stop();
                     LogPerf($"WorkspaceRuntime: Phase 3 - MinimizeExtraneousWindows took {swPhase3.ElapsedMilliseconds} ms");
                 }

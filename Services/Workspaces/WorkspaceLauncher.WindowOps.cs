@@ -38,15 +38,14 @@ namespace TopToolbar.Services.Workspaces
 
             try
             {
-                if (NativeWindowHelper.IsWindowCloaked(handle))
+                if (!EnsureWindowOnCurrentDesktop(handle, appLabel, "Resize"))
                 {
                     return;
                 }
 
-                if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(handle, out var isOnCurrentDesktop)
-                    && !isOnCurrentDesktop)
+                if (NativeWindowHelper.IsWindowCloaked(handle))
                 {
-                    return;
+                    LogPerf($"WorkspaceRuntime: [{appLabel}] Resize - window remains cloaked after desktop check; continuing placement attempt");
                 }
 
                 LogPerf($"WorkspaceRuntime: [{appLabel}] Resize - begin: minimized={app.Minimized}, maximized={app.Maximized}, position=({app.Position?.X},{app.Position?.Y},{app.Position?.Width},{app.Position?.Height})");
@@ -69,6 +68,18 @@ namespace TopToolbar.Services.Workspaces
                     await PostSettleWindowAsync(handle, position, app.Maximized, app.Minimized, cancellationToken)
                         .ConfigureAwait(false);
                 }
+                else if (app.Minimized || app.Maximized)
+                {
+                    // Existing windows can ignore a single ShowWindow call (especially multi-window apps).
+                    // Verify and retry until expected state is reached or timeout expires.
+                    await MakeSureWindowArrangedAsync(handle, position, app.Maximized, app.Minimized, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                if (app.Minimized)
+                {
+                    MinimizeSiblingProcessWindows(handle, appLabel);
+                }
 
                 sw.Stop();
                 LogPerf($"WorkspaceRuntime: [{appLabel}] Resize - done in {sw.ElapsedMilliseconds} ms");
@@ -84,7 +95,94 @@ namespace TopToolbar.Services.Workspaces
             }
         }
 
-        private void MinimizeExtraneousWindows(HashSet<IntPtr> workspaceHandles)
+        private void MinimizeSiblingProcessWindows(IntPtr primaryHandle, string appLabel)
+        {
+            try
+            {
+                if (primaryHandle == IntPtr.Zero)
+                {
+                    return;
+                }
+
+                if (!NativeWindowHelper.TryCreateWindowInfo(primaryHandle, out var primaryInfo)
+                    || primaryInfo == null
+                    || primaryInfo.ProcessId == 0)
+                {
+                    return;
+                }
+
+                var siblingHandles = NativeWindowHelper.EnumerateProcessWindows((int)primaryInfo.ProcessId);
+                if (siblingHandles == null || siblingHandles.Count == 0)
+                {
+                    return;
+                }
+
+                foreach (var hwnd in siblingHandles)
+                {
+                    if (hwnd == IntPtr.Zero || hwnd == primaryHandle)
+                    {
+                        continue;
+                    }
+
+                    if (!NativeWindowHelper.IsWindowHandleValid(hwnd))
+                    {
+                        continue;
+                    }
+
+                    if (NativeWindowHelper.IsWindowCloaked(hwnd))
+                    {
+                        continue;
+                    }
+
+                    if (!NativeWindowHelper.TryIsWindowVisible(hwnd, out var visible) || !visible)
+                    {
+                        continue;
+                    }
+
+                    if (!NativeWindowHelper.CanMinimizeWindow(hwnd))
+                    {
+                        continue;
+                    }
+
+                    NativeWindowHelper.MinimizeWindow(hwnd);
+                    LogPerf($"WorkspaceRuntime: [{appLabel}] Resize - minimized sibling window handle={hwnd}");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.LogWarning($"WorkspaceRuntime: [{appLabel}] Resize - minimize sibling windows failed: {ex.Message}");
+            }
+        }
+
+        private HashSet<uint> GetWorkspaceProcessIds(IReadOnlyCollection<EnsureAppResult> successfulApps)
+        {
+            var processIds = new HashSet<uint>();
+            if (successfulApps == null || successfulApps.Count == 0)
+            {
+                return processIds;
+            }
+
+            foreach (var result in successfulApps)
+            {
+                if (result.Handle == IntPtr.Zero)
+                {
+                    continue;
+                }
+
+                if (NativeWindowHelper.TryCreateWindowInfo(result.Handle, out var info)
+                    && info != null
+                    && info.ProcessId != 0)
+                {
+                    processIds.Add(info.ProcessId);
+                }
+            }
+
+            return processIds;
+        }
+
+        private void MinimizeExtraneousWindows(
+            HashSet<IntPtr> workspaceHandles,
+            HashSet<uint> workspaceProcessIds)
         {
             try
             {
@@ -103,13 +201,22 @@ namespace TopToolbar.Services.Workspaces
                         continue;
                     }
 
+                    if (workspaceProcessIds != null && workspaceProcessIds.Contains(window.ProcessId))
+                    {
+                        continue;
+                    }
+
                     if (NativeWindowHelper.IsWindowCloaked(window.Handle))
                     {
                         continue;
                     }
 
-                    if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop)
-                        && !isOnCurrentDesktop)
+                    if (!NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop))
+                    {
+                        continue;
+                    }
+
+                    if (!isOnCurrentDesktop)
                     {
                         continue;
                     }
@@ -120,6 +227,8 @@ namespace TopToolbar.Services.Workspaces
                     }
 
                     NativeWindowHelper.MinimizeWindow(window.Handle);
+                    LogPerf(
+                        $"WorkspaceRuntime: Phase 3 - minimized extraneous window handle={window.Handle}, processId={window.ProcessId}, title='{window.Title}'");
                 }
             }
             catch (Exception ex)
@@ -190,13 +299,7 @@ namespace TopToolbar.Services.Workspaces
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (NativeWindowHelper.IsWindowCloaked(handle))
-                {
-                    return;
-                }
-
-                if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(handle, out var isOnCurrentDesktop)
-                    && !isOnCurrentDesktop)
+                if (!EnsureWindowOnCurrentDesktop(handle, "<post-settle>", "PostSettle"))
                 {
                     return;
                 }

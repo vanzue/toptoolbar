@@ -52,6 +52,9 @@ namespace TopToolbar.Services.Windowing
         private static extern IntPtr GetShellWindow();
 
         [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
         private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
 
         [DllImport("user32.dll", SetLastError = true)]

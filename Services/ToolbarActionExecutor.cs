@@ -136,6 +136,13 @@ namespace TopToolbar.Services
                     {
                         _notificationService?.ShowError(BuildFailureMessage(button, message));
                     }
+                    else if (ShouldShowWorkspaceSuccess(action))
+                    {
+                        var successMessage = string.IsNullOrWhiteSpace(message)
+                            ? "Workspace ready."
+                            : message;
+                        _notificationService?.ShowSuccess(successMessage);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -165,6 +172,22 @@ namespace TopToolbar.Services
                     button.IsExecuting = false;
                 });
             }
+        }
+
+        private static bool ShouldShowWorkspaceSuccess(ToolbarAction action)
+        {
+            if (action == null)
+            {
+                return false;
+            }
+
+            if (!string.Equals(action.ProviderId, "WorkspaceProvider", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return !string.IsNullOrWhiteSpace(action.ProviderActionId)
+                && action.ProviderActionId.StartsWith("workspace.launch:", StringComparison.OrdinalIgnoreCase);
         }
 
         private void RunOnUi(Action action)

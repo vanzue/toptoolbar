@@ -26,11 +26,15 @@ namespace TopToolbar.Services
 
         public TimeSpan DefaultDuration { get; set; } = TimeSpan.FromSeconds(4);
 
+        public TimeSpan SuccessDuration { get; set; } = TimeSpan.FromSeconds(1);
+
         public void ShowError(string message) => Show(NotificationKind.Error, message, DefaultDuration);
 
         public void ShowWarning(string message) => Show(NotificationKind.Warning, message, DefaultDuration);
 
         public void ShowInfo(string message) => Show(NotificationKind.Info, message, DefaultDuration);
+
+        public void ShowSuccess(string message) => Show(NotificationKind.Info, message, SuccessDuration);
 
         private void Show(NotificationKind kind, string message, TimeSpan duration)
         {

@@ -80,11 +80,10 @@ namespace TopToolbar.Services.Workspaces
                         }
                         else
                         {
-                            if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(boundHandle, out var isOnCurrentDesktop)
-                                && !isOnCurrentDesktop)
+                            if (!EnsureWindowOnCurrentDesktop(boundHandle, appLabel, "TryAssignExisting-cached"))
                             {
                                 _managedWindows.UnbindApp(app.Id);
-                                LogPerf($"WorkspaceRuntime: [{appLabel}] TryAssignExisting - cached window handle={boundHandle} on another virtual desktop, unbound");
+                                LogPerf($"WorkspaceRuntime: [{appLabel}] TryAssignExisting - cached window handle={boundHandle} unavailable on current desktop, unbound");
                             }
                             else
                             {
@@ -126,7 +125,8 @@ namespace TopToolbar.Services.Workspaces
                         continue;
                     }
 
-                    if (NativeWindowHelper.IsWindowCloaked(window.Handle))
+                    if (NativeWindowHelper.IsWindowCloaked(window.Handle)
+                        && !app.Minimized)
                     {
                         continue;
                     }
@@ -152,10 +152,9 @@ namespace TopToolbar.Services.Workspaces
                         continue;
                     }
 
-                    if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop)
-                        && !isOnCurrentDesktop)
+                    if (!EnsureWindowOnCurrentDesktop(window.Handle, appLabel, "TryAssignExisting-candidate"))
                     {
-                        LogPerf($"WorkspaceRuntime: [{appLabel}] TryAssignExisting - candidate window handle={window.Handle} on another virtual desktop");
+                        LogPerf($"WorkspaceRuntime: [{appLabel}] TryAssignExisting - candidate window handle={window.Handle} unavailable on current desktop");
                         continue;
                     }
 
@@ -267,6 +266,14 @@ namespace TopToolbar.Services.Workspaces
             {
                 LogPerf($"WorkspaceRuntime: [{appLabel}] LaunchNew - begin");
 
+                if (HasMatchingCurrentDesktopWindowForApp(app))
+                {
+                    sw.Stop();
+                    LogPerf(
+                        $"WorkspaceRuntime: [{appLabel}] LaunchNew - skipped because a matching window already exists on current desktop");
+                    return EnsureAppResult.Failed(app);
+                }
+
                 // ApplicationFrameHost cannot be launched directly
                 if (IsApplicationFrameHostPath(app.Path))
                 {
@@ -298,6 +305,13 @@ namespace TopToolbar.Services.Workspaces
                 {
                     sw.Stop();
                     LogPerf($"WorkspaceRuntime: [{appLabel}] LaunchNew - no eligible window found after launch in {sw.ElapsedMilliseconds} ms");
+                    return EnsureAppResult.Failed(app);
+                }
+
+                if (!EnsureWindowOnCurrentDesktop(newHandle, appLabel, "LaunchNew-picked"))
+                {
+                    sw.Stop();
+                    LogPerf($"WorkspaceRuntime: [{appLabel}] LaunchNew - picked window is not available on current virtual desktop in {sw.ElapsedMilliseconds} ms");
                     return EnsureAppResult.Failed(app);
                 }
 
@@ -386,7 +400,7 @@ namespace TopToolbar.Services.Workspaces
 
             foreach (var window in windows)
             {
-                if (!IsEligibleLaunchWindow(window))
+                if (!IsEligibleLaunchWindow(window, app?.Minimized ?? false))
                 {
                     continue;
                 }
@@ -405,7 +419,14 @@ namespace TopToolbar.Services.Workspaces
                 }
 
                 var area = GetWindowArea(window.Bounds);
-                if (score > bestScore || (score == bestScore && area > bestArea))
+                var onCurrentDesktop = IsWindowOnCurrentDesktop(window.Handle);
+                if (!onCurrentDesktop)
+                {
+                    continue;
+                }
+
+                if (score > bestScore
+                    || (score == bestScore && area > bestArea))
                 {
                     best = window;
                     bestScore = score;
@@ -416,7 +437,7 @@ namespace TopToolbar.Services.Workspaces
             return best;
         }
 
-        private static bool IsEligibleLaunchWindow(WindowInfo window)
+        private static bool IsEligibleLaunchWindow(WindowInfo window, bool allowCloaked)
         {
             if (window == null || window.Handle == IntPtr.Zero)
             {
@@ -433,13 +454,7 @@ namespace TopToolbar.Services.Workspaces
                 return false;
             }
 
-            if (NativeWindowHelper.IsWindowCloaked(window.Handle))
-            {
-                return false;
-            }
-
-            if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(window.Handle, out var isOnCurrentDesktop)
-                && !isOnCurrentDesktop)
+            if (!allowCloaked && NativeWindowHelper.IsWindowCloaked(window.Handle))
             {
                 return false;
             }
@@ -482,6 +497,44 @@ namespace TopToolbar.Services.Workspaces
             var dx = appCenterX - windowCenterX;
             var dy = appCenterY - windowCenterY;
             return (dx * dx) + (dy * dy);
+        }
+
+        private bool HasMatchingCurrentDesktopWindowForApp(ApplicationDefinition app)
+        {
+            try
+            {
+                if (app == null)
+                {
+                    return false;
+                }
+
+                var snapshot = _windowManager.GetSnapshot();
+                if (snapshot == null || snapshot.Count == 0)
+                {
+                    return false;
+                }
+
+                for (var i = 0; i < snapshot.Count; i++)
+                {
+                    var window = snapshot[i];
+                    if (window == null || window.Handle == IntPtr.Zero)
+                    {
+                        continue;
+                    }
+
+                    if (WorkspaceWindowMatcher.GetMatchScore(window, app) > 0
+                        && IsWindowOnCurrentDesktop(window.Handle))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private WindowSnapshotIndex BuildWindowSnapshotIndex(

@@ -214,5 +214,45 @@ namespace TopToolbar.Services.Workspaces
             {
             }
         }
+
+        private static bool IsWindowOnCurrentDesktop(IntPtr handle)
+        {
+            if (handle == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            if (NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(handle, out var isOnCurrentDesktop))
+            {
+                return isOnCurrentDesktop;
+            }
+
+            return false;
+        }
+
+        private bool EnsureWindowOnCurrentDesktop(
+            IntPtr handle,
+            string appLabel,
+            string stage)
+        {
+            if (handle == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            var querySucceeded = NativeWindowHelper.TryIsWindowOnCurrentVirtualDesktop(handle, out var isOnCurrentDesktop);
+            if (querySucceeded && isOnCurrentDesktop)
+            {
+                return true;
+            }
+
+            if (!querySucceeded)
+            {
+                LogPerf($"WorkspaceRuntime: [{appLabel}] {stage} - desktop query unavailable for handle={handle}; treating as off-desktop");
+            }
+
+            LogPerf($"WorkspaceRuntime: [{appLabel}] {stage} - window handle={handle} is not on current virtual desktop");
+            return false;
+        }
     }
 }
