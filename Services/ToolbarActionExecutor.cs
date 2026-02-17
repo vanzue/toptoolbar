@@ -347,21 +347,13 @@ namespace TopToolbar.Services
                 if (p != null)
                 {
                     AppLogger.LogInfo($"Launch: started pid={p.Id}");
-                    return null;
                 }
-                AppLogger.LogWarning("Launch: Process.Start returned null; attempting fallback without shell execute");
-
-                psi.UseShellExecute = false;
-                psi.Verb = string.Empty;
-                p = Process.Start(psi);
-                if (p != null)
+                else
                 {
-                    AppLogger.LogInfo($"Launch fallback: started pid={p.Id}");
-                    return null;
+                    // Shell-activated launches (URI/document handlers) may succeed without a process handle.
+                    AppLogger.LogInfo("Launch: started via shell without process handle.");
                 }
-
-                AppLogger.LogError("Launch: Process.Start returned null even without shell execute");
-                return "Launch failed.";
+                return null;
             }
             catch (Win32Exception ex)
             {

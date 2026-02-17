@@ -14,6 +14,10 @@ namespace TopToolbar.ViewModels
 {
     public partial class SettingsViewModel
     {
+        public const string DefaultGroupsId = "default-groups";
+        public const string DefaultGroupsName = "Built-in";
+        private const string DefaultGroupsDescription = "Built-in";
+
         public ObservableCollection<ButtonGroup> Groups { get; } = new();
 
         private ButtonGroup _selectedGroup;
@@ -41,6 +45,10 @@ namespace TopToolbar.ViewModels
                     // Must update IsGroupSelected after IsGeneralSelected is updated
                     OnPropertyChanged(nameof(IsGroupSelected));
                     OnPropertyChanged(nameof(IsWorkspaceSelected));
+                    OnPropertyChanged(nameof(IsUserGroupSelected));
+                    OnPropertyChanged(nameof(IsDefaultActionsGroupSelected));
+                    OnPropertyChanged(nameof(CanRemoveSelectedGroup));
+                    OnPropertyChanged(nameof(CanAddButtonToSelectedGroup));
                 }
             }
         }
@@ -76,6 +84,10 @@ namespace TopToolbar.ViewModels
                     OnPropertyChanged(nameof(IsGeneralSelected));
                     OnPropertyChanged(nameof(IsGroupSelected));
                     OnPropertyChanged(nameof(IsWorkspaceSelected));
+                    OnPropertyChanged(nameof(IsUserGroupSelected));
+                    OnPropertyChanged(nameof(IsDefaultActionsGroupSelected));
+                    OnPropertyChanged(nameof(CanRemoveSelectedGroup));
+                    OnPropertyChanged(nameof(CanAddButtonToSelectedGroup));
                     if (value)
                     {
                         // Deselect group when General is selected
@@ -87,6 +99,43 @@ namespace TopToolbar.ViewModels
         }
 
         public bool IsGroupSelected => !IsGeneralSelected && SelectedGroup != null;
+
+        public bool IsUserGroupSelected => IsGroupSelected && !IsLockedDefaultGroup(SelectedGroup);
+
+        public bool IsDefaultActionsGroupSelected => IsGroupSelected && IsLockedDefaultGroup(SelectedGroup);
+
+        public bool CanRemoveSelectedGroup => IsUserGroupSelected;
+
+        public bool CanAddButtonToSelectedGroup => IsUserGroupSelected;
+
+        public bool IsLockedGroup(ButtonGroup group) => IsLockedDefaultGroup(group);
+
+        public void EnsureDefaultActionsGroupEntry()
+        {
+            var existing = Groups.FirstOrDefault(IsLockedDefaultGroup);
+            if (existing != null)
+            {
+                existing.Name = DefaultGroupsName;
+                existing.Description = DefaultGroupsDescription;
+                existing.IsEnabled = true;
+                return;
+            }
+
+            var defaultGroup = new ButtonGroup
+            {
+                Id = DefaultGroupsId,
+                Name = DefaultGroupsName,
+                Description = DefaultGroupsDescription,
+                IsEnabled = true,
+                Layout = new ToolbarGroupLayout
+                {
+                    Style = ToolbarGroupLayoutStyle.Icon,
+                    Overflow = ToolbarGroupOverflowMode.Wrap,
+                },
+            };
+
+            Groups.Insert(0, defaultGroup);
+        }
 
         private void Groups_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
@@ -233,6 +282,11 @@ namespace TopToolbar.ViewModels
 
         public void RemoveGroup(ButtonGroup group)
         {
+            if (group == null || IsLockedDefaultGroup(group))
+            {
+                return;
+            }
+
             Groups.Remove(group);
             if (SelectedGroup == group)
             {
@@ -245,6 +299,11 @@ namespace TopToolbar.ViewModels
 
         public void AddButton(ButtonGroup group)
         {
+            if (group == null || IsLockedDefaultGroup(group))
+            {
+                return;
+            }
+
             var button = new ToolbarButton
             {
                 Name = "New Button",
@@ -285,6 +344,12 @@ namespace TopToolbar.ViewModels
             }
 
             ScheduleSave();
+        }
+
+        private static bool IsLockedDefaultGroup(ButtonGroup group)
+        {
+            return group != null &&
+                   string.Equals(group.Id, DefaultGroupsId, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

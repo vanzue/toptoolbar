@@ -215,6 +215,23 @@ public partial class ToolbarButton : INotifyPropertyChanged
     private bool _isExecuting;
 
     [JsonIgnore]
+    private bool _isDimmed;
+
+    [JsonIgnore]
+    public bool IsDimmed
+    {
+        get => _isDimmed;
+        set
+        {
+            if (_isDimmed != value)
+            {
+                _isDimmed = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    [JsonIgnore]
         public bool IsExecuting
         {
             get => _isExecuting;

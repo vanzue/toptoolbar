@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Threading;
 using Microsoft.UI.Xaml;
@@ -43,6 +44,7 @@ namespace TopToolbar
         private IntPtr _oldWndProc;
         private DpiWndProcDelegate _newWndProc;
         private SettingsWindow _settingsWindow;
+        private PropertyChangedEventHandler _settingsViewModelPropertyChangedHandler;
 
         private bool _snapshotInProgress;
 
@@ -93,8 +95,7 @@ namespace TopToolbar
                     return;
                 }
 
-                // Only handle WorkspaceProvider for now (other providers not yet dynamic)
-                if (!string.Equals(args.ProviderId, "WorkspaceProvider", StringComparison.OrdinalIgnoreCase))
+                if (!IsRegisteredGroupProvider(args.ProviderId))
                 {
                     return;
                 }
@@ -114,35 +115,7 @@ namespace TopToolbar
                         return; // other change kinds (progress, execution) not yet surfaced
                     }
 
-                    // Build new group off the UI thread
-                    var ctx = new ActionContext();
-                    ButtonGroup newGroup;
-                    try
-                    {
-                        newGroup = await _providerService.CreateGroupAsync("WorkspaceProvider", ctx, CancellationToken.None);
-                    }
-                    catch
-                    {
-                        // TODO: log: failed to create workspace group
-                        return;
-                    }
-
-                    void ApplyStore()
-                    {
-                        try
-                        {
-                            _store.UpsertProviderGroup(newGroup);
-                        }
-                        catch
-                        {
-                            // TODO: log: store upsert failed
-                        }
-                    }
-
-                    if (!DispatcherQueue.TryEnqueue(ApplyStore))
-                    {
-                        ApplyStore();
-                    }
+                    await RefreshProviderGroupAsync(args.ProviderId, CancellationToken.None);
                 }
                 catch (Exception)
                 {
@@ -171,12 +144,12 @@ namespace TopToolbar
                 }
 
                 await _vm.LoadAsync(this.DispatcherQueue);
-                await RefreshWorkspaceGroupAsync();
+                await RunOnUiThreadAsync(SyncStaticGroupsIntoStore);
+                await RefreshDynamicProviderGroupsAsync(CancellationToken.None);
 
-                // Ensure UI-thread access for XAML object tree
-                DispatcherQueue.TryEnqueue(() =>
+                await RunOnUiThreadAsync(() =>
                 {
-                    SyncStaticGroupsIntoStore();
+                    ApplyTheme(_vm.Theme);
                     ApplyDisplayMode(_vm.DisplayMode);
                     if (_currentDisplayMode == ToolbarDisplayMode.TopBar)
                     {
@@ -184,6 +157,7 @@ namespace TopToolbar
                         PositionAtTopCenter();
                     }
 
+                    ToolbarScrollViewer?.ChangeView(0, null, null, disableAnimation: true);
                     _builtConfigOnce = true;
                 });
             };
@@ -286,8 +260,34 @@ namespace TopToolbar
             }
 
             _settingsWindow = new SettingsWindow(_providerRuntime);
+
+            _settingsViewModelPropertyChangedHandler = (_, args) =>
+            {
+                if (args?.PropertyName == nameof(SettingsViewModel.Theme) ||
+                    args?.PropertyName == nameof(SettingsViewModel.ThemeIndex))
+                {
+                    var selectedTheme = _settingsWindow?.ViewModel?.Theme ?? _vm.Theme;
+                    if (DispatcherQueue == null || DispatcherQueue.HasThreadAccess)
+                    {
+                        ApplyTheme(selectedTheme);
+                    }
+                    else
+                    {
+                        _ = DispatcherQueue.TryEnqueue(() => ApplyTheme(selectedTheme));
+                    }
+                }
+            };
+            _settingsWindow.ViewModel.PropertyChanged += _settingsViewModelPropertyChangedHandler;
+
             _settingsWindow.Closed += (_, __) =>
             {
+                var closedWindow = _settingsWindow;
+                if (closedWindow?.ViewModel != null && _settingsViewModelPropertyChangedHandler != null)
+                {
+                    closedWindow.ViewModel.PropertyChanged -= _settingsViewModelPropertyChangedHandler;
+                }
+
+                _settingsViewModelPropertyChangedHandler = null;
                 _settingsWindow = null;
             };
             _settingsWindow.Activate();

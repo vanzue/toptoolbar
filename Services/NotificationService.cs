@@ -134,12 +134,6 @@ namespace TopToolbar.Services
                 .Replace('\n', ' ')
                 .Replace('\r', ' ');
 
-            const int maxLength = 140;
-            if (normalized.Length > maxLength)
-            {
-                normalized = normalized.Substring(0, maxLength - 3) + "...";
-            }
-
             return normalized;
         }
     }

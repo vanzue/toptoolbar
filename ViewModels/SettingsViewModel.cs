@@ -49,13 +49,17 @@ namespace TopToolbar.ViewModels
                 try
                 {
                     DisplayMode = toolbarConfig.DisplayMode;
+                    Theme = toolbarConfig.Theme;
+                    SystemControlsEnabled = toolbarConfig.DefaultActions.SystemControlsEnabled;
+                    MediaPlayPauseEnabled = toolbarConfig.DefaultActions.MediaPlayPause.Enabled;
 
                     Groups.Clear();
                     foreach (var g in toolbarConfig.Groups)
                     {
                         Groups.Add(g);
-                        HookGroup(g);
                     }
+
+                    EnsureDefaultActionsGroupEntry();
 
                     if (SelectedGroup == null && Groups.Count > 0)
                     {
@@ -131,6 +135,15 @@ namespace TopToolbar.ViewModels
             var cfg = new ToolbarConfig
             {
                 DisplayMode = DisplayMode,
+                Theme = Theme,
+                DefaultActions = new DefaultActionsConfig
+                {
+                    SystemControlsEnabled = SystemControlsEnabled,
+                    MediaPlayPause = new DefaultActionItemConfig
+                    {
+                        Enabled = MediaPlayPauseEnabled,
+                    },
+                },
                 Groups = Groups.Select(g => new ButtonGroup
                 {
                     Id = g.Id,
@@ -144,7 +157,9 @@ namespace TopToolbar.ViewModels
                     AutoRefresh = g.AutoRefresh,
                     Buttons = new System.Collections.ObjectModel.ObservableCollection<ToolbarButton>(
                         g.Buttons.Where(b => !string.IsNullOrWhiteSpace(b.Action?.Command))),
-                }).ToList(),
+                })
+                .Where(g => !string.Equals(g.Id, DefaultGroupsId, StringComparison.OrdinalIgnoreCase))
+                .ToList(),
             };
 
             await _service.SaveAsync(cfg);

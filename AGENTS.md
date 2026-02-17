@@ -31,6 +31,7 @@
   - For explicit RID Release (project-only): `dotnet build .\TopToolbar.csproj -c Release -r win-arm64 -p:Platform=arm64`
   - Note: `.slnx` + `-r` is blocked by .NET SDK (`NETSDK1134`), so use `.csproj` when passing `-r`.
 - Before building, kill `TopToolbar.exe` if it is running.
+- After a successful build, start `TopToolbar.exe` automatically for user testing (use the arm64 build output, e.g. `bin\arm64\Debug\net9.0-windows10.0.19041.0\win-arm64\TopToolbar.exe`).
 
 ## Design/behavior considerations
 - Always consider **virtual desktops** and **multi-monitor** behavior when making changes.

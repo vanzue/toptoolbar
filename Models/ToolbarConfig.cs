@@ -14,4 +14,8 @@ public class ToolbarConfig
     public Dictionary<string, string> Bindings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public ToolbarDisplayMode DisplayMode { get; set; } = ToolbarDisplayMode.TopBar;
+
+    public ToolbarTheme Theme { get; set; } = ToolbarTheme.WarmFrosted;
+
+    public DefaultActionsConfig DefaultActions { get; set; } = new();
 }

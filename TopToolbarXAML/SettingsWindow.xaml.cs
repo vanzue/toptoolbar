@@ -21,6 +21,7 @@ namespace TopToolbar
         private bool _disposed;
         private FrameworkElement _appTitleBarCache;
         private ColumnDefinition _leftPaneColumnCache;
+        private DateTime _lastLoadedConfigWriteUtc = DateTime.MinValue;
 
         public SettingsViewModel ViewModel => _vm;
 
@@ -38,9 +39,10 @@ namespace TopToolbar
             };
             this.Activated += async (s, e) =>
             {
-                if (_vm.Groups.Count == 0)
+                if (ShouldReloadToolbarConfig())
                 {
                     await _vm.LoadAsync(this.DispatcherQueue);
+                    _lastLoadedConfigWriteUtc = GetToolbarConfigWriteUtc();
                 }
 
                 // Load startup state when window activates
@@ -227,6 +229,34 @@ namespace TopToolbar
             catch { }
 
             return null;
+        }
+
+        private bool ShouldReloadToolbarConfig()
+        {
+            if (_vm.Groups.Count == 0)
+            {
+                return true;
+            }
+
+            var currentWriteUtc = GetToolbarConfigWriteUtc();
+            return currentWriteUtc > _lastLoadedConfigWriteUtc;
+        }
+
+        private static DateTime GetToolbarConfigWriteUtc()
+        {
+            try
+            {
+                var path = AppPaths.ConfigFile;
+                if (!string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path))
+                {
+                    return System.IO.File.GetLastWriteTimeUtc(path);
+                }
+            }
+            catch
+            {
+            }
+
+            return DateTime.MinValue;
         }
 
         // Removed manual BeginDragMove implementation: using SetTitleBar now.

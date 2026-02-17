@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -46,7 +47,7 @@ namespace TopToolbar
 
         private async void OnRemoveSelectedGroup(object sender, RoutedEventArgs e)
         {
-            if (_vm.SelectedGroup != null)
+            if (_vm.SelectedGroup != null && _vm.CanRemoveSelectedGroup)
             {
                 _vm.RemoveGroup(_vm.SelectedGroup);
                 await _vm.SaveAsync();
@@ -55,7 +56,7 @@ namespace TopToolbar
 
         private void OnAddButton(object sender, RoutedEventArgs e)
         {
-            if (_vm.SelectedGroup != null)
+            if (_vm.SelectedGroup != null && _vm.CanAddButtonToSelectedGroup)
             {
                 _vm.AddButton(_vm.SelectedGroup);
                 // Don't save immediately - new button has empty command
@@ -71,42 +72,65 @@ namespace TopToolbar
             WorkspacesList.SelectedItem = null;
         }
 
-        // Inline rename handlers for groups list
-        private void OnStartRenameGroup(object sender, RoutedEventArgs e)
+        // Rename handlers for groups list
+        private async void OnStartRenameGroup(object sender, RoutedEventArgs e)
         {
             try
             {
                 if (sender is Button btn && btn.Tag is ButtonGroup group)
                 {
-                    // Ensure this group is selected
-                    if (_vm.SelectedGroup != group)
+                    if (_vm.IsLockedGroup(group))
                     {
-                        _vm.SelectedGroup = group;
+                        return;
                     }
 
-                    // Find ListViewItem visual tree, then TextBox
-                    // Access GroupsList via root FrameworkElement (Window itself has no FindName in WinUI 3)
-                    var root = this.Content as FrameworkElement;
-                    var groupsList = root?.FindName("GroupsList") as ListView;
-                    var container = groupsList?.ContainerFromItem(group) as ListViewItem;
-                    if (container != null)
-                    {
-                        var editBox = FindChild<TextBox>(container, "NameEdit");
-                        var textBlock = FindChild<TextBlock>(container, "NameText");
-                        if (editBox != null && textBlock != null)
-                        {
-                            textBlock.Visibility = Visibility.Collapsed;
-                            editBox.Visibility = Visibility.Visible;
-                            editBox.SelectAll();
-                            _ = editBox.Focus(FocusState.Programmatic);
-                        }
-                    }
+                    await PromptRenameGroupAsync(group);
                 }
             }
             catch (Exception ex)
             {
                 SafeLogWarning("OnStartRenameGroup: " + ex.Message);
             }
+        }
+
+        private async Task PromptRenameGroupAsync(ButtonGroup group)
+        {
+            if (group == null)
+            {
+                return;
+            }
+
+            var input = new TextBox
+            {
+                Text = group.Name ?? string.Empty,
+                MinWidth = 320,
+                PlaceholderText = "Group name",
+            };
+
+            var dialog = new ContentDialog
+            {
+                Title = "Rename Group",
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                Content = input,
+                XamlRoot = (this.Content as FrameworkElement)?.XamlRoot,
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            var newName = (input.Text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(newName) || string.Equals(newName, group.Name, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            group.Name = newName;
+            await _vm.SaveAsync();
         }
 
         private void CommitGroupRename(TextBox editBox, TextBlock textBlock)

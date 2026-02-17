@@ -23,10 +23,13 @@ namespace TopToolbar.ViewModels
         private readonly HashSet<string> _staticGroupIds = new(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource _loadCts = new();
         private ToolbarDisplayMode _displayMode = ToolbarDisplayMode.TopBar;
+        private ToolbarTheme _theme = ToolbarTheme.WarmFrosted;
 
         public ObservableCollection<ButtonGroup> Groups { get; } = new();
 
         public ToolbarDisplayMode DisplayMode => _displayMode;
+
+        public ToolbarTheme Theme => _theme;
 
         public ToolbarViewModel(
             ToolbarConfigService configService,
@@ -62,6 +65,7 @@ namespace TopToolbar.ViewModels
             try
             {
                 _displayMode = config.DisplayMode;
+                _theme = config.Theme;
 
                 foreach (var group in config.Groups ?? Enumerable.Empty<ButtonGroup>())
                 {
@@ -97,7 +101,11 @@ namespace TopToolbar.ViewModels
 
         public async Task SaveAsync()
         {
-            var config = new ToolbarConfig();
+            var config = new ToolbarConfig
+            {
+                DisplayMode = _displayMode,
+                Theme = _theme,
+            };
 
             foreach (var group in Groups)
             {

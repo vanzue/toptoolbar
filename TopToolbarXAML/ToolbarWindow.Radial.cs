@@ -426,7 +426,7 @@ namespace TopToolbar
 
             foreach (var button in group.Buttons)
             {
-                if (button?.Button == null || !button.Button.IsActionEnabled)
+                if (button?.Button == null || !button.IsEnabled)
                 {
                     continue;
                 }

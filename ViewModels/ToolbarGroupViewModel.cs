@@ -129,11 +129,22 @@ namespace TopToolbar.ViewModels
             }
 
             _trackedButtons.Clear();
+
+            foreach (var item in Buttons)
+            {
+                item.Dispose();
+            }
+
             Buttons.Clear();
         }
 
         private void RebuildButtons()
         {
+            foreach (var item in Buttons)
+            {
+                item.Dispose();
+            }
+
             Buttons.Clear();
             foreach (var button in _trackedButtons)
             {
@@ -310,6 +321,7 @@ namespace TopToolbar.ViewModels
             int index = FindButtonIndex(button);
             if (index >= 0)
             {
+                Buttons[index].Dispose();
                 Buttons.RemoveAt(index);
             }
         }
@@ -353,7 +365,7 @@ namespace TopToolbar.ViewModels
 
         private void UpdateVisibility()
         {
-            bool visible = _group != null && _group.IsEnabled && Buttons.Count > 0;
+            bool visible = _group != null && Buttons.Count > 0;
             IsVisible = visible;
         }
 

@@ -57,9 +57,16 @@ namespace TopToolbar.Services
             config ??= new ToolbarConfig();
             config.Groups ??= new List<ButtonGroup>();
             config.Bindings ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            config.DefaultActions ??= new DefaultActionsConfig();
+            config.DefaultActions.MediaPlayPause ??= new DefaultActionItemConfig();
             if (!Enum.IsDefined(typeof(ToolbarDisplayMode), config.DisplayMode))
             {
                 config.DisplayMode = ToolbarDisplayMode.TopBar;
+            }
+
+            if (!Enum.IsDefined(typeof(ToolbarTheme), config.Theme))
+            {
+                config.Theme = ToolbarTheme.WarmFrosted;
             }
 
             foreach (var group in config.Groups)
@@ -87,10 +94,6 @@ namespace TopToolbar.Services
                     Overflow = ToolbarGroupOverflowMode.Wrap,
                 },
             };
-
-            system.Buttons.Add(new ToolbarButton { Name = "Display", IconGlyph = "\uE7F4", Action = new ToolbarAction { Command = "ms-settings:display" } });
-            system.Buttons.Add(new ToolbarButton { Name = "Sound", IconGlyph = "\uE767", Action = new ToolbarAction { Command = "ms-settings:sound" } });
-            system.Buttons.Add(new ToolbarButton { Name = "Network", IconGlyph = "\uE968", Action = new ToolbarAction { Command = "ms-settings:network" } });
 
             return new ToolbarConfig
             {
