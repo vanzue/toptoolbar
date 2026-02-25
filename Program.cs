@@ -9,7 +9,6 @@ using Microsoft.UI.Xaml;
 using TopToolbar.Logging;
 using TopToolbar.Services.Pinning;
 using TopToolbar.Services.ShellIntegration;
-using Windows.ApplicationModel;
 
 namespace TopToolbar
 {
@@ -60,21 +59,15 @@ namespace TopToolbar
                 return;
             }
 
-            if (!IsRunningPackaged())
+            try
             {
-                try
-                {
-                    var executablePath = Environment.ProcessPath ?? string.Empty;
-                    ContextMenuRegistrationService.EnsureRegisteredForCurrentUser(executablePath);
-                }
-                catch (Exception ex)
-                {
-                    AppLogger.LogWarning($"ContextMenuRegistration: startup registration failed - {ex.Message}");
-                }
-            }
-            else
-            {
+                // Win11 menu integration is provided by the packaged COM verb.
+                // Always remove legacy HKCU shell verbs to avoid duplicate entries.
                 ContextMenuRegistrationService.RemoveRegistrationForCurrentUser();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.LogWarning($"ContextMenuRegistration: cleanup failed - {ex.Message}");
             }
 
             Application.Start(args =>
@@ -138,17 +131,5 @@ namespace TopToolbar
             }
         }
 
-        private static bool IsRunningPackaged()
-        {
-            try
-            {
-                _ = Package.Current;
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
     }
 }
