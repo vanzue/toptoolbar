@@ -37,6 +37,8 @@ namespace TopToolbar
         private Timer _monitorTimer;
         private Timer _configWatcherDebounce;
         private bool _isVisible;
+        private bool _requireCtrlForTopBarTrigger;
+        private int _topBarTriggerWidth = 320;
         private bool _builtConfigOnce;
         private IntPtr _hwnd;
         private bool _initializedLayout;
@@ -150,6 +152,7 @@ namespace TopToolbar
                 await RunOnUiThreadAsync(() =>
                 {
                     ApplyTheme(_vm.Theme);
+                    _requireCtrlForTopBarTrigger = _vm.RequireCtrlForTopBarTrigger;
                     ApplyDisplayMode(_vm.DisplayMode);
                     if (_currentDisplayMode == ToolbarDisplayMode.TopBar)
                     {

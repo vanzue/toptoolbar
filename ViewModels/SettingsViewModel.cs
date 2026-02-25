@@ -49,6 +49,7 @@ namespace TopToolbar.ViewModels
                 try
                 {
                     DisplayMode = toolbarConfig.DisplayMode;
+                    RequireCtrlForTopBarTrigger = toolbarConfig.RequireCtrlForTopBarTrigger;
                     Theme = toolbarConfig.Theme;
                     SystemControlsEnabled = toolbarConfig.DefaultActions.SystemControlsEnabled;
                     MediaPlayPauseEnabled = toolbarConfig.DefaultActions.MediaPlayPause.Enabled;
@@ -135,6 +136,7 @@ namespace TopToolbar.ViewModels
             var cfg = new ToolbarConfig
             {
                 DisplayMode = DisplayMode,
+                RequireCtrlForTopBarTrigger = RequireCtrlForTopBarTrigger,
                 Theme = Theme,
                 DefaultActions = new DefaultActionsConfig
                 {

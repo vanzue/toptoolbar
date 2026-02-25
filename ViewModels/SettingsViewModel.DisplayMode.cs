@@ -9,6 +9,7 @@ namespace TopToolbar.ViewModels
     public partial class SettingsViewModel
     {
         private ToolbarDisplayMode _displayMode = ToolbarDisplayMode.TopBar;
+        private bool _requireCtrlForTopBarTrigger;
 
         public ToolbarDisplayMode DisplayMode
         {
@@ -19,6 +20,7 @@ namespace TopToolbar.ViewModels
                 {
                     SetProperty(ref _displayMode, value);
                     OnPropertyChanged(nameof(DisplayModeIndex));
+                    OnPropertyChanged(nameof(IsTopBarModeSelected));
                     if (!_suppressGeneralSave)
                     {
                         ScheduleSave();
@@ -31,6 +33,24 @@ namespace TopToolbar.ViewModels
         {
             get => DisplayMode == ToolbarDisplayMode.RadialMenu ? 1 : 0;
             set => DisplayMode = value == 1 ? ToolbarDisplayMode.RadialMenu : ToolbarDisplayMode.TopBar;
+        }
+
+        public bool IsTopBarModeSelected => DisplayMode == ToolbarDisplayMode.TopBar;
+
+        public bool RequireCtrlForTopBarTrigger
+        {
+            get => _requireCtrlForTopBarTrigger;
+            set
+            {
+                if (_requireCtrlForTopBarTrigger != value)
+                {
+                    SetProperty(ref _requireCtrlForTopBarTrigger, value);
+                    if (!_suppressGeneralSave)
+                    {
+                        ScheduleSave();
+                    }
+                }
+            }
         }
     }
 }

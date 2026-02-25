@@ -74,6 +74,7 @@ namespace TopToolbar
                     await RunOnUiThreadAsync(() =>
                     {
                         ApplyTheme(_vm.Theme);
+                        _requireCtrlForTopBarTrigger = _vm.RequireCtrlForTopBarTrigger;
                         ApplyDisplayMode(_vm.DisplayMode);
                         if (_currentDisplayMode == ToolbarDisplayMode.TopBar)
                         {

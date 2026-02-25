@@ -12,6 +12,10 @@ namespace TopToolbar
 {
     public sealed partial class ToolbarWindow
     {
+        private const int TriggerWindowHeight = 10;
+        private const int TriggerWindowMinWidth = 320;
+        private const int VkControl = 0x11;
+
         private void StartMonitoring()
         {
             if (_monitorTimer != null)
@@ -40,14 +44,17 @@ namespace TopToolbar
 
             GetCursorPos(out var pt);
             var displayArea = DisplayArea.GetFromPoint(new Windows.Graphics.PointInt32(pt.X, pt.Y), DisplayAreaFallback.Primary);
-            var topEdge = displayArea.WorkArea.Y;
-            bool inTrigger = pt.Y <= topEdge + TriggerZoneHeight;
+            GetTriggerWindowBounds(displayArea, out var triggerLeft, out var triggerTop, out var triggerRight, out var triggerBottom);
 
-            if (inTrigger && !_isVisible)
+            var inTriggerWindow = IsPointInRect(pt.X, pt.Y, triggerLeft, triggerTop, triggerRight, triggerBottom);
+            var ctrlGatePassed = !_requireCtrlForTopBarTrigger || IsCtrlPressed();
+            var shouldShow = inTriggerWindow && ctrlGatePassed;
+
+            if (shouldShow && !_isVisible)
             {
                 DispatcherQueue.TryEnqueue(() => ShowToolbar());
             }
-            else if (!inTrigger && _isVisible)
+            else if (_isVisible)
             {
                 // hide when cursor is not over the toolbar rectangle
                 DispatcherQueue.TryEnqueue(() =>
@@ -56,7 +63,8 @@ namespace TopToolbar
                     var winSize = this.AppWindow.Size;
                     bool overToolbar = pt.X >= winPos.X && pt.X <= winPos.X + winSize.Width &&
                                        pt.Y >= winPos.Y && pt.Y <= winPos.Y + winSize.Height;
-                    if (!overToolbar)
+                    bool overTriggerWindow = IsPointInRect(pt.X, pt.Y, triggerLeft, triggerTop, triggerRight, triggerBottom);
+                    if (!overToolbar && !overTriggerWindow)
                     {
                         HideToolbar();
                     }
@@ -94,6 +102,33 @@ namespace TopToolbar
         {
             public int X;
             public int Y;
+        }
+
+        private void GetTriggerWindowBounds(
+            DisplayArea displayArea,
+            out int left,
+            out int top,
+            out int right,
+            out int bottom)
+        {
+            var work = displayArea.WorkArea;
+            var triggerWidth = Math.Max(_topBarTriggerWidth, TriggerWindowMinWidth);
+            triggerWidth = Math.Min(triggerWidth, work.Width);
+
+            left = work.X + ((work.Width - triggerWidth) / 2);
+            top = work.Y;
+            right = left + triggerWidth;
+            bottom = top + Math.Max(TriggerWindowHeight, TriggerZoneHeight);
+        }
+
+        private static bool IsPointInRect(int x, int y, int left, int top, int right, int bottom)
+        {
+            return x >= left && x <= right && y >= top && y <= bottom;
+        }
+
+        private static bool IsCtrlPressed()
+        {
+            return (GetAsyncKeyState(VkControl) & 0x8000) != 0;
         }
     }
 }

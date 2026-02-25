@@ -492,13 +492,55 @@
                                               Toggled="OnStartupToggled"/>
                             </tkcontrols:SettingsCard>
 
-                            <tkcontrols:SettingsCard Header="Toolbar appearance"
-                                                    Description="Choose how TopToolbar appears when invoked.">
-                                <ComboBox SelectedIndex="{x:Bind ViewModel.DisplayModeIndex, Mode=TwoWay}">
-                                    <ComboBoxItem Content="Top bar (screen edge trigger)"/>
-                                    <ComboBoxItem Content="Radial menu (Alt+Space)"/>
-                                </ComboBox>
-                            </tkcontrols:SettingsCard>
+                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="12"
+                                    Padding="16,12">
+                                <StackPanel Spacing="10"
+                                            HorizontalAlignment="Stretch">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="Top bar appearance"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"/>
+                                        <TextBlock Text="Choose how TopToolbar appears when invoked."
+                                                   Opacity="0.72"/>
+                                    </StackPanel>
+
+                                    <Border Height="1"
+                                            Background="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            Opacity="0.35"
+                                            Margin="0,2,0,2"/>
+
+                                    <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="12"
+                                            Padding="2">
+                                        <StackPanel Spacing="0">
+                                            <tkcontrols:SettingsCard Header="Mode"
+                                                                    ContentAlignment="Right">
+                                                <ComboBox Width="260"
+                                                          SelectedIndex="{x:Bind ViewModel.DisplayModeIndex, Mode=TwoWay}"
+                                                          HorizontalAlignment="Right">
+                                                    <ComboBoxItem Content="Top bar (screen edge trigger)"/>
+                                                    <ComboBoxItem Content="Radial menu (Alt+Space)"/>
+                                                </ComboBox>
+                                            </tkcontrols:SettingsCard>
+
+                                            <tkcontrols:SettingsCard Header="Require Ctrl"
+                                                                    Description="Only trigger when Ctrl is held in Top bar mode."
+                                                                    ContentAlignment="Right">
+                                                <ToggleSwitch HorizontalAlignment="Right"
+                                                              IsOn="{x:Bind ViewModel.RequireCtrlForTopBarTrigger, Mode=TwoWay}"
+                                                              IsEnabled="{x:Bind ViewModel.IsTopBarModeSelected, Mode=OneWay}"
+                                                              OnContent=""
+                                                              OffContent=""/>
+                                            </tkcontrols:SettingsCard>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
 
                             <tkcontrols:SettingsCard Header="Theme"
                                                     Description="Choose a built-in toolbar visual style.">

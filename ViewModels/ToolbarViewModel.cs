@@ -23,11 +23,14 @@ namespace TopToolbar.ViewModels
         private readonly HashSet<string> _staticGroupIds = new(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource _loadCts = new();
         private ToolbarDisplayMode _displayMode = ToolbarDisplayMode.TopBar;
+        private bool _requireCtrlForTopBarTrigger;
         private ToolbarTheme _theme = ToolbarTheme.WarmFrosted;
 
         public ObservableCollection<ButtonGroup> Groups { get; } = new();
 
         public ToolbarDisplayMode DisplayMode => _displayMode;
+
+        public bool RequireCtrlForTopBarTrigger => _requireCtrlForTopBarTrigger;
 
         public ToolbarTheme Theme => _theme;
 
@@ -65,6 +68,7 @@ namespace TopToolbar.ViewModels
             try
             {
                 _displayMode = config.DisplayMode;
+                _requireCtrlForTopBarTrigger = config.RequireCtrlForTopBarTrigger;
                 _theme = config.Theme;
 
                 foreach (var group in config.Groups ?? Enumerable.Empty<ButtonGroup>())
@@ -104,6 +108,7 @@ namespace TopToolbar.ViewModels
             var config = new ToolbarConfig
             {
                 DisplayMode = _displayMode,
+                RequireCtrlForTopBarTrigger = _requireCtrlForTopBarTrigger,
                 Theme = _theme,
             };
 

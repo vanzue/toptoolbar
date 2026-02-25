@@ -50,6 +50,7 @@ namespace TopToolbar
             int heightPx = (int)Math.Ceiling(heightWithShadowDip * scale);
 
             this.AppWindow.Resize(new Windows.Graphics.SizeInt32(widthPx, heightPx));
+            _topBarTriggerWidth = Math.Max(widthPx, TriggerWindowMinWidth);
         }
 
         private void PositionAtTopCenter()

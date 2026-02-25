@@ -15,6 +15,8 @@ public class ToolbarConfig
 
     public ToolbarDisplayMode DisplayMode { get; set; } = ToolbarDisplayMode.TopBar;
 
+    public bool RequireCtrlForTopBarTrigger { get; set; }
+
     public ToolbarTheme Theme { get; set; } = ToolbarTheme.WarmFrosted;
 
     public DefaultActionsConfig DefaultActions { get; set; } = new();
