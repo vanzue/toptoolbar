@@ -118,6 +118,39 @@ namespace TopToolbar.ViewModels
             await SaveCoreAsync();
         }
 
+        private Task RunOnUiThreadAsync(Action action)
+        {
+            if (action == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (_dispatcher == null || _dispatcher.HasThreadAccess)
+            {
+                action();
+                return Task.CompletedTask;
+            }
+
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!_dispatcher.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        action();
+                        tcs.SetResult(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        tcs.SetException(ex);
+                    }
+                }))
+            {
+                tcs.SetException(new InvalidOperationException("Failed to enqueue work on the UI thread."));
+            }
+
+            return tcs.Task;
+        }
+
         private async Task SaveCoreAsync()
         {
             // Ensure exe icons extracted before save (robustness if user hit Save quickly)

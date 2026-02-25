@@ -40,46 +40,54 @@ namespace TopToolbar.ViewModels
             try
             {
                 var startupTask = await StartupTask.GetAsync("TopToolbarStartup");
-                switch (startupTask.State)
+                var state = startupTask.State;
+
+                await RunOnUiThreadAsync(() =>
                 {
-                    case StartupTaskState.Enabled:
-                        IsStartupEnabled = true;
-                        IsStartupAvailable = true;
-                        StartupStatusText = string.Empty;
-                        break;
-                    case StartupTaskState.Disabled:
-                        IsStartupEnabled = false;
-                        IsStartupAvailable = true;
-                        StartupStatusText = string.Empty;
-                        break;
-                    case StartupTaskState.DisabledByUser:
-                        IsStartupEnabled = false;
-                        IsStartupAvailable = false;
-                        StartupStatusText = "Disabled in Task Manager. Enable it there first.";
-                        break;
-                    case StartupTaskState.DisabledByPolicy:
-                        IsStartupEnabled = false;
-                        IsStartupAvailable = false;
-                        StartupStatusText = "Disabled by group policy.";
-                        break;
-                    case StartupTaskState.EnabledByPolicy:
-                        IsStartupEnabled = true;
-                        IsStartupAvailable = false;
-                        StartupStatusText = "Enabled by group policy.";
-                        break;
-                    default:
-                        IsStartupEnabled = false;
-                        IsStartupAvailable = false;
-                        StartupStatusText = "Status unknown.";
-                        break;
-                }
+                    switch (state)
+                    {
+                        case StartupTaskState.Enabled:
+                            IsStartupEnabled = true;
+                            IsStartupAvailable = true;
+                            StartupStatusText = string.Empty;
+                            break;
+                        case StartupTaskState.Disabled:
+                            IsStartupEnabled = false;
+                            IsStartupAvailable = true;
+                            StartupStatusText = string.Empty;
+                            break;
+                        case StartupTaskState.DisabledByUser:
+                            IsStartupEnabled = false;
+                            IsStartupAvailable = false;
+                            StartupStatusText = "Disabled in Task Manager. Enable it there first.";
+                            break;
+                        case StartupTaskState.DisabledByPolicy:
+                            IsStartupEnabled = false;
+                            IsStartupAvailable = false;
+                            StartupStatusText = "Disabled by group policy.";
+                            break;
+                        case StartupTaskState.EnabledByPolicy:
+                            IsStartupEnabled = true;
+                            IsStartupAvailable = false;
+                            StartupStatusText = "Enabled by group policy.";
+                            break;
+                        default:
+                            IsStartupEnabled = false;
+                            IsStartupAvailable = false;
+                            StartupStatusText = "Status unknown.";
+                            break;
+                    }
+                });
             }
             catch (Exception ex)
             {
                 AppLogger.LogWarning($"Failed to get startup task state: {ex.Message}");
-                IsStartupEnabled = false;
-                IsStartupAvailable = false;
-                StartupStatusText = "Startup task not available (non-packaged app?).";
+                await RunOnUiThreadAsync(() =>
+                {
+                    IsStartupEnabled = false;
+                    IsStartupAvailable = false;
+                    StartupStatusText = "Startup task not available (non-packaged app?).";
+                });
             }
         }
 
@@ -92,37 +100,47 @@ namespace TopToolbar.ViewModels
                 if (enabled)
                 {
                     var newState = await startupTask.RequestEnableAsync();
-                    IsStartupEnabled = newState == StartupTaskState.Enabled;
+                    var isEnabled = newState == StartupTaskState.Enabled;
+                    var isAvailable = true;
+                    var statusText = string.Empty;
 
                     if (newState == StartupTaskState.DisabledByUser)
                     {
-                        StartupStatusText = "Disabled in Task Manager. Enable it there first.";
-                        IsStartupAvailable = false;
+                        statusText = "Disabled in Task Manager. Enable it there first.";
+                        isAvailable = false;
                     }
                     else if (newState == StartupTaskState.DisabledByPolicy)
                     {
-                        StartupStatusText = "Disabled by group policy.";
-                        IsStartupAvailable = false;
-                    }
-                    else
-                    {
-                        StartupStatusText = string.Empty;
+                        statusText = "Disabled by group policy.";
+                        isAvailable = false;
                     }
 
-                    return IsStartupEnabled;
+                    await RunOnUiThreadAsync(() =>
+                    {
+                        IsStartupEnabled = isEnabled;
+                        IsStartupAvailable = isAvailable;
+                        StartupStatusText = statusText;
+                    });
+
+                    return isEnabled;
                 }
                 else
                 {
                     startupTask.Disable();
-                    IsStartupEnabled = false;
-                    StartupStatusText = string.Empty;
+                    await RunOnUiThreadAsync(() =>
+                    {
+                        IsStartupEnabled = false;
+                        IsStartupAvailable = true;
+                        StartupStatusText = string.Empty;
+                    });
+
                     return true;
                 }
             }
             catch (Exception ex)
             {
                 AppLogger.LogWarning($"Failed to set startup state: {ex.Message}");
-                StartupStatusText = $"Failed: {ex.Message}";
+                await RunOnUiThreadAsync(() => StartupStatusText = $"Failed: {ex.Message}");
                 return false;
             }
         }
